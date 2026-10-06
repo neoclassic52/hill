@@ -6,7 +6,7 @@
 <title>OKA — 丘の時間</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Stardos+Stencil:wght@700&display=swap" rel="stylesheet">
 <style>
   :root {
     --panel: rgba(18, 26, 34, 0.62);
@@ -187,7 +187,22 @@
   </div>
 
   <div class="sep"></div>
+  <h2>ビートル <span>neoclassic</span></h2>
+  <div class="row">
+    <div class="lab">走る速さ <em id="v_car"></em></div>
+    <input type="range" id="carSpeed" min="0" max="1" step="0.01">
+    <div class="ends"><span>とまる</span><span>はやい</span></div>
+  </div>
+  <div class="row">
+    <div class="lab">カメラ</div>
+    <div class="seg" id="camMode">
+      <button data-c="0">丘から</button><button data-c="1">追いかける</button><button data-c="2">並走</button><button data-c="3">正面</button>
+    </div>
+  </div>
+
+  <div class="sep"></div>
   <div class="toggles">
+    <button class="tog" id="t_car">ビートル</button>
     <button class="tog" id="t_auto">時間を進める</button>
     <button class="tog" id="t_life">生き物</button>
     <button class="tog" id="t_meteor">流れ星</button>
@@ -212,11 +227,12 @@ import * as THREE from 'three';
 const DEFAULTS = {
   time: 13.0, wind: 0.35, cloud: 0.3, rainbow: 0, season: 0.6, weather: 0, real: 0, crt: 0,
   auto: false, life: true, meteor: true, sound: false,
+  car: true, carSpeed: 0.4, cam: 0,
 };
 const params = { ...DEFAULTS };
 // 実際に画面に効いている値（なめらかに追従）
 const st = { time: params.time, wind: params.wind, cloud: params.cloud, rainbow: 0, season: params.season, real: 0, crt: 0,
-  overcast: 0, rain: 0, snowfall: 0, wet: 0, snowAcc: 0, life: 1, meteor: 1 };
+  overcast: 0, rain: 0, snowfall: 0, wet: 0, snowAcc: 0, life: 1, meteor: 1, carSpeed: params.carSpeed };
 
 const PRESETS = [
   { name: 'あの壁紙', grad: 'linear-gradient(#2f72e0 55%, #4fa52a 55%)', p: { time: 13, wind: 0.3, cloud: 0.3, rainbow: 0, season: 0.6, weather: 0, real: 0, crt: 0 } },
@@ -479,7 +495,7 @@ const groundMat = new THREE.ShaderMaterial({
       float rows = 0.5 + 0.5 * sin(wp.x * 0.9 + wp.y * 0.15 + n1 * 6.0);
       col *= 1.0 - 0.05 * rows * smoothstep(400.0, 40.0, dc);
       col *= 0.94 + 0.12 * n3 * smoothstep(120.0, 10.0, dc);
-      float near = 1.0 - smoothstep(uGrassRadius * 0.3, uGrassRadius * 1.0, dc);
+      float near = 1.0 - smoothstep(uGrassRadius * 0.3, uGrassRadius * 1.0, length(wp));
       col = mix(col, uGrassBase * mix(0.7, 0.4, uRealism), near * mix(0.3, 0.75, uRealism));
       float g = gustAt(wp);
       col *= 1.0 + uWind * 0.22 * (g - 0.45) * (1.0 - uSnow);
@@ -504,12 +520,13 @@ scene.add(ground);
 // ---------------------------------------------------------------------
 //  草
 // ---------------------------------------------------------------------
-const TOUCH_N = 14;
+const TOUCH_N = 20;
+const carTouch = [new THREE.Vector4(0, 0, 0, 1.4), new THREE.Vector4(0, 0, 0, 1.4)];
 const touches = Array.from({ length: TOUCH_N }, () => new THREE.Vector4(0, 0, 0, 1));
 const grassU = {
   ...U, uGrassBase: groundU.uGrassBase, uGrassTip: groundU.uGrassTip, uGrassRadius: groundU.uGrassRadius,
   uGrassDry: { value: new THREE.Color(0.8, 0.72, 0.46) }, uDryAmount: { value: 0.05 }, uTouch: { value: touches },
-  uFlowerAmount: { value: 0.5 },
+  uFlowerAmount: { value: 0.5 }, uCar: { value: carTouch },
 };
 function bladeGeometry(segs) {
   const pos = [], idx = [];
@@ -531,12 +548,13 @@ const grassMat = new THREE.ShaderMaterial({
     attribute vec4 aOffset; attribute vec4 aParams;
     uniform vec3 uGrassBase, uGrassTip, uGrassDry; uniform float uDryAmount, uGrassRadius;
     uniform vec4 uTouch[${TOUCH_N}];
+    uniform vec4 uCar[2];
     varying vec3 vColor;
     void main(){
       vec3 off = aOffset.xyz; float rnd = aOffset.w;
       float t = position.y;
       float dist = length(off.xz - uCamPos.xz);
-      float edge = 1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius, dist);
+      float edge = 1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius, length(off.xz));
       float tall = mix(0.22, 0.72, uRealism) * mix(1.0, 0.75 + 0.5 * fract(rnd * 91.7), uRealism);
       tall *= mix(1.0, 0.45 + 0.55 * smoothstep(0.6, 4.0, dist), uRealism);
       float poke = step(0.93, fract(rnd * 53.1));                      // 雪から顔を出す草
@@ -551,6 +569,11 @@ const grassMat = new THREE.ShaderMaterial({
         vec4 tp = uTouch[i];
         vec2 dv = off.xz - tp.xy; float d = length(dv);
         push += dv / (d + 0.08) * tp.z * (1.0 - smoothstep(0.0, tp.w, d));
+      }
+      for (int i = 0; i < 2; i++) {
+        vec4 tp = uCar[i];
+        vec2 dv = off.xz - tp.xy; float d = length(dv);
+        push += dv / (d + 0.08) * tp.z * 1.6 * (1.0 - smoothstep(0.0, tp.w, d));
       }
       bend += push * 1.25;
       float combed = min(length(push), 1.0);
@@ -605,7 +628,7 @@ const flowerMat = new THREE.ShaderMaterial({
     void main(){
       vec3 off = aOffset.xyz; float rnd = aOffset.w;
       float dist = length(off.xz - uCamPos.xz);
-      float show = smoothstep(rnd - 0.04, rnd, uFlowerAmount) * (1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius * 0.75, dist)) * (1.0 - uSnow);
+      float show = smoothstep(rnd - 0.04, rnd, uFlowerAmount) * (1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius * 0.75, length(off.xz))) * (1.0 - uSnow);
       float H = mix(0.2, 0.8, uRealism) * aParams.y;
       float s = aParams.z * show * (1.0 + dist * 0.03) * mix(1.0, 1.25, uRealism);
       vec2 bend = windBend(off.xz, rnd) * 0.9;
@@ -817,6 +840,424 @@ const fireMat = new THREE.ShaderMaterial({
 const fireflies = new THREE.Points(fireGeo, fireMat); fireflies.frustumCulled = false; scene.add(fireflies);
 
 // =====================================================================
+//  ビートル（neoclassic 号）
+// =====================================================================
+// 車のローカル座標：x = 前, y = 上, z = 右。地面が y = 0
+const WHEELS = [[1.28, 1], [1.28, -1], [-1.26, 1], [-1.26, -1]];
+const WHEEL_R = 0.33;
+
+function canvasTex(w, h, draw, repeat = false) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const tex = new THREE.CanvasTexture(c);
+  tex.redraw = () => { const g = c.getContext('2d'); g.clearRect(0, 0, w, h); draw(g, w, h); tex.needsUpdate = true; };
+  tex.redraw();
+  if (repeat) { tex.wrapS = tex.wrapT = THREE.RepeatWrapping; }
+  tex.anisotropy = 8;
+  return tex;
+}
+// 当社オリジナルチェック柄（白地に6色の斜めチェック＋水色の細線＋白い文字）
+const plaidTex = canvasTex(1024, 1024, (g, W) => {
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, W);
+  const C = { pk: '#f592bd', or: '#fbbd78', ye: '#fff06c', gr: '#acd57e', bl: '#9fd5f3', mv: '#cdb9bf' };
+  const sett = [['pk', 46], [null, 18], ['or', 38], ['ye', 50], [null, 22], ['gr', 40], ['bl', 44], [null, 16],
+                ['mv', 34], ['ye', 30], [null, 20], ['pk', 30], ['gr', 36], [null, 18], ['bl', 40], ['or', 30]];
+  const S = 512;
+  const band = (dir, s0, s1, color, alpha) => {
+    g.globalAlpha = alpha; g.fillStyle = color; g.beginPath();
+    if (dir > 0) { g.moveTo(s0, 0); g.lineTo(s1, 0); g.lineTo(s1 - W, W); g.lineTo(s0 - W, W); }
+    else { g.moveTo(s0, 0); g.lineTo(s1, 0); g.lineTo(s1 + W, W); g.lineTo(s0 + W, W); }
+    g.closePath(); g.fill();
+  };
+  for (const [dir, shift] of [[1, 0], [-1, 137]]) {
+    for (let k = -3; k < 5; k++) {
+      let s = k * S + shift;
+      for (const [col, wdt] of sett) { if (col) band(dir, s, s + wdt, C[col], 0.72); s += wdt; }
+      for (const o of [160, 421]) band(dir, k * S + shift + o, k * S + shift + o + 3, '#45bccd', 0.9);
+      band(dir, k * S + shift + 300, k * S + shift + 302, '#e9a6bf', 0.8);
+    }
+  }
+  g.globalAlpha = 1;
+  // 白い文字マーク（n e o c l a s i）
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  g.font = '700 30px "Stardos Stencil", "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const letters = 'neoclasic';
+  for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) {
+    if (rnd() > 0.42) continue;
+    const x = i * 64 + 32 + (j % 2) * 32, y = j * 64 + 32;
+    g.save(); g.translate(x % W, y); g.rotate((rnd() - 0.5) * 0.6);
+    g.fillStyle = 'rgba(255,255,255,0.95)';
+    if (rnd() < 0.35) { g.beginPath(); g.arc(0, 0, 13, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(120,170,200,0.55)'; g.font = '700 18px "Stardos Stencil", sans-serif'; }
+    g.fillText(letters[Math.floor(rnd() * letters.length)], 0, 1);
+    g.restore();
+    g.font = '700 30px "Stardos Stencil", "Arial Black", sans-serif';
+  }
+}, true);
+// 給油口の neo.C ロゴ
+const logoTex = canvasTex(512, 512, (g) => {
+  const cx = 256, cy = 256;
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(cx, cy, 252, 0, Math.PI * 2); g.fill();
+  // 黒いリング（右回りの矢印）
+  g.strokeStyle = '#111'; g.lineWidth = 72; g.lineCap = 'butt';
+  const a0 = Math.PI * 0.70, a1 = Math.PI * 0.58 + Math.PI * 2;
+  g.beginPath(); g.arc(cx, cy + 6, 168, a0, a1); g.stroke();
+  // 矢じり（左下・下向き）
+  const p = (a, r) => [cx + Math.cos(a) * r, cy + 6 + Math.sin(a) * r];
+  g.fillStyle = '#111'; g.beginPath();
+  g.moveTo(...p(a0 + 0.02, 228)); g.lineTo(...p(a0 + 0.02, 108)); g.lineTo(...p(a0 - 0.42, 150)); g.closePath(); g.fill();
+  // 文字 neo.C（白文字＋黒フチ＋白フチ）
+  g.save(); g.translate(cx + 4, cy + 10); g.transform(1, 0, -0.28, 1, 0, 0);
+  g.font = 'italic 900 132px "Arial Black", "Helvetica Neue", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = 46; g.strokeStyle = '#fff'; g.strokeText('neo.C', 0, 0);
+  g.lineWidth = 26; g.strokeStyle = '#111'; g.strokeText('neo.C', 0, 0);
+  g.fillStyle = '#fff'; g.fillText('neo.C', 0, 0);
+  g.restore();
+  g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, 250, 0, Math.PI * 2); g.stroke();
+});
+// 後ろの窓の neoclassic 文字
+const textTex = canvasTex(1024, 256, (g, W, H) => {
+  g.fillStyle = '#b5dbf2'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '700 150px "Stardos Stencil", "Georgia", serif';
+  g.fillText('neoclassic', W / 2, H / 2 + 6);
+});
+// ホイール（5本の2重スポーク）
+const rimTex = canvasTex(256, 256, (g) => {
+  g.translate(128, 128);
+  g.fillStyle = '#1d1e20'; g.beginPath(); g.arc(0, 0, 122, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#c9cdd2'; g.lineCap = 'round';
+  for (let i = 0; i < 5; i++) for (const d of [-0.13, 0.13]) {
+    const a = i / 5 * Math.PI * 2 + d;
+    g.lineWidth = 15; g.beginPath(); g.moveTo(Math.cos(a - d * 0.8) * 26, Math.sin(a - d * 0.8) * 26); g.lineTo(Math.cos(a) * 112, Math.sin(a) * 112); g.stroke();
+  }
+  g.lineWidth = 12; g.strokeStyle = '#d7dade'; g.beginPath(); g.arc(0, 0, 114, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#d0d3d7'; g.beginPath(); g.arc(0, 0, 28, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#9aa0a6'; g.beginPath(); g.arc(0, 0, 15, 0, Math.PI * 2); g.fill();
+});
+const glowTex = canvasTex(128, 128, (g) => {
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+});
+document.fonts?.load('700 40px "Stardos Stencil"').then(() => { plaidTex.redraw(); textTex.redraw(); }).catch(() => {});
+
+// --- 車体のかたち（横から見た輪郭：x, 下端, 上端, 半幅）
+const BODY_PROFILE = [
+  [2.17, 0.53, 0.68, 0.22], [2.15, 0.42, 0.80, 0.45], [2.10, 0.35, 0.88, 0.68], [2.00, 0.31, 0.95, 0.82],
+  [1.80, 0.30, 0.99, 0.88], [1.40, 0.30, 1.02, 0.89], [0.95, 0.30, 1.06, 0.895], [0.60, 0.30, 1.27, 0.895],
+  [0.25, 0.30, 1.44, 0.89], [-0.20, 0.30, 1.51, 0.89], [-0.75, 0.30, 1.48, 0.895], [-1.20, 0.30, 1.34, 0.895],
+  [-1.55, 0.31, 1.14, 0.89], [-1.85, 0.33, 0.99, 0.85], [-2.04, 0.37, 0.92, 0.74], [-2.13, 0.43, 0.84, 0.50],
+  [-2.17, 0.54, 0.70, 0.24],
+];
+function catmull(p0, p1, p2, p3, t) { const t2 = t * t, t3 = t2 * t; return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); }
+function sampleProfile(u) {
+  const n = BODY_PROFILE.length, i = Math.min(Math.floor(u), n - 2), t = u - i;
+  const g = k => BODY_PROFILE[Math.max(0, Math.min(n - 1, k))];
+  return [0, 1, 2, 3].map(c => catmull(g(i - 1)[c], g(i)[c], g(i + 1)[c], g(i + 2)[c], t));
+}
+function buildBody() {
+  const n = BODY_PROFILE.length, RINGS = (n - 1) * 10 + 1, M = 64, ne = 3.0;
+  const pos = [], idx = [];
+  for (let r = 0; r < RINGS; r++) {
+    const [x, b, t, w] = sampleProfile(r / (RINGS - 1) * (n - 1));
+    for (let k = 0; k < M; k++) {
+      const a = k / M * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      const sz = Math.sign(c) * Math.pow(Math.abs(c), 2 / ne), sy = Math.sign(s) * Math.pow(Math.abs(s), 2 / ne);
+      const y = (b + t) / 2 + (t - b) / 2 * sy;
+      pos.push(x, y, w * sz * (1 - 0.2 * smoothstep(0.98, 1.5, y)));
+    }
+  }
+  for (let r = 0; r < RINGS - 1; r++) for (let k = 0; k < M; k++) {
+    const a = r * M + k, b = r * M + (k + 1) % M, c = a + M, d = b + M;
+    idx.push(a, b, c, b, d, c);
+  }
+  // 前後のふた
+  for (const [r, front] of [[0, true], [RINGS - 1, false]]) {
+    let cx = 0, cy = 0, cz = 0;
+    for (let k = 0; k < M; k++) { cx += pos[(r * M + k) * 3]; cy += pos[(r * M + k) * 3 + 1]; cz += pos[(r * M + k) * 3 + 2]; }
+    const ci = pos.length / 3; pos.push(cx / M + (front ? 0.012 : -0.012), cy / M, cz / M);
+    for (let k = 0; k < M; k++) { const a = r * M + k, b = r * M + (k + 1) % M; if (front) idx.push(ci, b, a); else idx.push(ci, a, b); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+const carPaintU = {
+  ...U, uPaint: { value: new THREE.Color(0.56, 0.71, 0.86) }, uPlaid: { value: plaidTex }, uLogo: { value: logoTex }, uText: { value: textTex },
+  uZen: skyU.uZenith, uHor: skyU.uHorizon,
+};
+const PAINT_VS = /* glsl */`
+  varying vec3 vP; varying vec3 vNl; varying vec3 vW; varying vec3 vN;
+  void main(){ vP = position; vNl = normal; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * w; }`;
+const paintFS = glassPass => COMMON + /* glsl */`
+  uniform vec3 uPaint, uZen, uHor; uniform sampler2D uPlaid, uLogo, uText;
+  varying vec3 vP; varying vec3 vNl; varying vec3 vW; varying vec3 vN;
+  vec3 envCol(vec3 R){
+    vec3 sky = mix(uHor, uZen, smoothstep(0.0, 0.6, R.y));
+    vec3 gnd = uHor * 0.25 + vec3(0.06, 0.1, 0.03);
+    return R.y > 0.0 ? sky : mix(uHor * 0.7, gnd, smoothstep(0.0, -0.15, R.y));
+  }
+  bool inBox(vec2 c){ return c.x > 0.0 && c.y > 0.0 && c.x < 1.0 && c.y < 1.0; }
+  void main(){
+    vec3 P = vP; vec3 Nl = normalize(vNl);
+    float side = P.z >= 0.0 ? 1.0 : -1.0;
+    float dA = min(length(P.xy - vec2(1.28, 0.34)), length(P.xy - vec2(-1.26, 0.34)));
+    if (dA < 0.405 && abs(P.z) > 0.42 && P.y < 0.8) discard;               // タイヤハウス
+    bool sideN = abs(Nl.z) > 0.3;
+    float yb = 0.99;
+    float aEdge = 0.63 - (P.y - yb) * 0.86, cEdge = -1.18 + (P.y - yb) * 1.14;
+    bool sideWin = sideN && P.y > yb && P.y < 1.34 && P.x < aEdge && P.x > cEdge;
+    bool sideWinE = sideN && P.y > yb - 0.025 && P.y < 1.37 && P.x < aEdge + 0.035 && P.x > cEdge - 0.035;
+    bool bPillar = sideWin && P.x < -0.49 && P.x > -0.57;
+    bool frontWin = Nl.x > 0.22 && P.y > 1.07 && P.y < 1.41 && P.x > 0.0 && abs(P.z) < 0.78;
+    bool rearWin = Nl.x < -0.25 && P.y > 1.06 && P.y < 1.37 && P.x < -0.9 && abs(P.z) < 0.68;
+    bool glass = (sideWin && !bPillar) || frontWin || rearWin;
+    vec4 txt = vec4(0.0);
+    if (sideWin && P.x < -0.57) {
+      vec2 tc = vec2((side > 0.0 ? (P.x + 0.84) : (-0.84 - P.x)) / 0.5 + 0.5, (P.y - 1.07) / 0.125 + 0.5);
+      if (inBox(tc)) txt = texture2D(uText, tc);
+    }
+    vec3 N = normalize(vN); vec3 V = normalize(uCamPos - vW); vec3 R = reflect(-V, N);
+    float sh = cloudShadow(vW);
+    ${glassPass ? `
+    if (!glass || txt.a > 0.5 || !gl_FrontFacing) discard;
+    float fres = 0.1 + 0.9 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
+    vec3 col = mix(vec3(0.015, 0.02, 0.03), envCol(R), clamp(fres * 1.3, 0.0, 1.0));
+    col += uLightColor * pow(max(dot(R, uLightDir), 0.0), 220.0) * 2.5 * sh;
+    gl_FragColor = vec4(applyFog(col, vW), mix(0.32, 0.92, fres));
+    ` : `
+    if (glass && txt.a < 0.5) discard;
+    if (!gl_FrontFacing) { gl_FragColor = vec4(applyFog(vec3(0.03, 0.03, 0.035) * (0.6 + uAmbient), vW), 1.0); return; }
+    vec3 base = uPaint; float spec = 1.0, gloss = 90.0;
+    float sideF = smoothstep(0.3, 0.55, abs(Nl.z));
+    if (txt.a > 0.5) { base = vec3(0.66, 0.83, 0.94); spec = 0.5; }
+    else if (bPillar) { base = vec3(0.025); spec = 1.2; }
+    else if (sideWinE && !sideWin) { base = vec3(0.34, 0.28, 0.42); spec = 1.4; gloss = 160.0; }    // 紫がかった窓枠
+    else if (P.y > 1.38 && Nl.y > 0.45 && P.x < 0.4 && P.x > -1.0) { base = vec3(0.02, 0.022, 0.03); spec = 1.6; gloss = 260.0; } // パノラマルーフ
+    else if (sideF > 0.5 && P.y > 0.36 && P.y < 0.955 && P.x > -1.45 + max(0.0, 0.62 - P.y) * 0.0 && P.x < 1.06 && dA > 0.47) {
+      base = texture2D(uPlaid, vec2(P.x * side, P.y) * 0.42).rgb;   // チェック柄のラッピング
+      spec = 0.75; gloss = 70.0;
+    }
+    if (side > 0.0 && sideF > 0.5) {                                 // 給油口のロゴ
+      vec2 lc = (P.xy - vec2(-1.12, 0.84)) / 0.24 + 0.5;
+      if (inBox(lc)) { vec4 lg = texture2D(uLogo, lc); base = mix(base, lg.rgb, lg.a); }
+    }
+    if (sideF > 0.5 && P.y > 0.322 && P.y < 0.348 && dA > 0.44) { base = vec3(0.78); spec = 2.2; gloss = 320.0; }   // 下のクロームモール
+    if (P.x > 1.9 && P.y < 0.56 && P.y > 0.36 && Nl.x > 0.2) { base = vec3(0.035); if (abs(P.y - 0.47) < 0.012) base = vec3(0.8); }
+    if (P.x < -2.0 && P.y < 0.5 && Nl.x < -0.2) base *= 0.75;
+    float ndl = max(dot(N, uLightDir), 0.0);
+    vec3 col = base * (uAmbient * 0.85 + uLightColor * ndl * sh * 0.95);
+    float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    col = mix(col, envCol(R), fres * 0.55 * min(spec, 1.0));
+    col += envCol(R) * 0.05 * spec;
+    col += uLightColor * pow(max(dot(R, uLightDir), 0.0), gloss) * sh * 0.9 * spec;
+    gl_FragColor = vec4(applyFog(col, vW), 1.0);
+    `}
+  }`;
+const paintMat = new THREE.ShaderMaterial({ uniforms: carPaintU, vertexShader: PAINT_VS, fragmentShader: paintFS(false), side: THREE.DoubleSide });
+const glassMat = new THREE.ShaderMaterial({ uniforms: carPaintU, vertexShader: PAINT_VS, fragmentShader: paintFS(true), transparent: true, depthWrite: false });
+
+// 汎用の質感（タイヤ・ライト・車内・お花など）
+function litMat({ color = [1, 1, 1], spec = 0.2, gloss = 30, map = null, interior = 0, opacity = 1, side = THREE.FrontSide, additive = false } = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...U, uColor: { value: new THREE.Color(...color) }, uSpec: { value: spec }, uGloss: { value: gloss }, uMap: { value: map }, uUseMap: { value: map ? 1 : 0 },
+      uEmissive: { value: new THREE.Color(0, 0, 0) }, uInterior: { value: interior }, uOpacity: { value: opacity }, uZen: skyU.uZenith, uHor: skyU.uHorizon },
+    side, transparent: opacity < 1 || additive, depthWrite: opacity >= 1 && !additive, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    vertexShader: /* glsl */`varying vec3 vW; varying vec3 vN; varying vec2 vUv;
+      void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: COMMON + /* glsl */`
+      uniform vec3 uColor, uEmissive, uZen, uHor; uniform float uSpec, uGloss, uUseMap, uInterior, uOpacity; uniform sampler2D uMap;
+      varying vec3 vW; varying vec3 vN; varying vec2 vUv;
+      void main(){
+        vec3 base = uColor;
+        if (uUseMap > 0.5) { vec4 t = texture2D(uMap, vUv); if (t.a < 0.5) discard; base = t.rgb; }
+        vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
+        vec3 V = normalize(uCamPos - vW); vec3 R = reflect(-V, N);
+        float sh = mix(cloudShadow(vW), 0.55, uInterior);
+        float ndl = max(dot(N, uLightDir), 0.0) * (1.0 - 0.45 * uInterior);
+        vec3 col = base * (uAmbient * mix(0.9, 0.7, uInterior) + uLightColor * ndl * sh * 0.9);
+        col += uLightColor * pow(max(dot(R, uLightDir), 0.0), uGloss) * uSpec * sh;
+        col += mix(uHor, uZen, clamp(R.y, 0.0, 1.0)) * uSpec * 0.12;
+        col += uEmissive;
+        gl_FragColor = vec4(applyFog(col, vW), uOpacity);
+      }`,
+  });
+}
+
+const car = new THREE.Group();
+scene.add(car);
+const bodyGeo = buildBody();
+const body = new THREE.Mesh(bodyGeo, paintMat); car.add(body);
+const bodyGlass = new THREE.Mesh(bodyGeo, glassMat); bodyGlass.renderOrder = 5; car.add(bodyGlass);
+// フェンダーの縁・ミラー（車体と同じ塗装）
+for (const [wx, sd] of WHEELS) {
+  const g = new THREE.TorusGeometry(0.425, 0.05, 10, 32, Math.PI).translate(wx, 0.34, sd * 0.865);
+  car.add(new THREE.Mesh(g, paintMat));
+}
+for (const sd of [1, -1]) {
+  const g = new THREE.SphereGeometry(1, 16, 12).scale(0.11, 0.075, 0.12).translate(0.66, 1.08, sd * 0.97);
+  car.add(new THREE.Mesh(g, paintMat));
+  car.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.12).translate(0.64, 1.05, sd * 0.9), paintMat));
+}
+// ホイール
+const tyreMat = litMat({ color: [0.045, 0.045, 0.05], spec: 0.15, gloss: 12 });
+const rimMat = litMat({ map: rimTex, spec: 0.9, gloss: 60 });
+const wheelSpin = [];
+for (const [wx, sd] of WHEELS) {
+  const w = new THREE.Group(); w.position.set(wx, WHEEL_R, sd * 0.78);
+  w.add(new THREE.Mesh(new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.215, 30).rotateX(Math.PI / 2), tyreMat));
+  const rim = new THREE.Mesh(new THREE.CircleGeometry(0.235, 32), rimMat);
+  rim.position.z = sd * 0.109; if (sd < 0) rim.rotation.y = Math.PI;
+  w.add(rim);
+  car.add(w); wheelSpin.push(w);
+}
+// ライト
+const headMat = litMat({ color: [0.75, 0.78, 0.8], spec: 1.5, gloss: 120 });
+const chromeMat = litMat({ color: [0.8, 0.82, 0.85], spec: 1.6, gloss: 160 });
+const tailMat = litMat({ color: [0.62, 0.05, 0.06], spec: 1.2, gloss: 120 });
+const glowSprites = [];
+const bodyRay = new THREE.Raycaster();
+function onBody(from, dir) {   // 車体の表面上の点と向きを求める
+  bodyRay.set(from.clone().addScaledVector(dir, 2), dir.clone().negate());
+  const hit = bodyRay.intersectObject(body, false)[0];
+  return hit ? { p: hit.point, n: hit.face.normal.clone() } : { p: from, n: dir };
+}
+for (const sd of [1, -1]) {
+  const hd = onBody(new THREE.Vector3(1.9, 0.76, sd * 0.56), new THREE.Vector3(1, 0.1, sd * 0.55).normalize());
+  const at = hd.p.clone().addScaledVector(hd.n, 0.012), dir = hd.n;
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.105, 28), headMat);
+  lens.position.copy(at); lens.lookAt(at.clone().add(dir)); car.add(lens);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 28), chromeMat);
+  ring.position.copy(at); ring.lookAt(at.clone().add(dir)); car.add(ring);
+  const tl = onBody(new THREE.Vector3(-2.0, 0.9, sd * 0.6), new THREE.Vector3(-1, 0.05, sd * 0.5).normalize());
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12).scale(0.1, 0.13, 0.025), tailMat);
+  tail.position.copy(tl.p); tail.lookAt(tl.p.clone().add(tl.n)); tail.rotateZ(sd * 0.5); car.add(tail);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xfff1d6, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  sp.position.copy(at).addScaledVector(dir, 0.06); sp.scale.setScalar(1.3); car.add(sp); glowSprites.push(sp);
+  const tsp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff3030, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  tsp.position.copy(tl.p).addScaledVector(tl.n, 0.05); tsp.scale.setScalar(0.6); car.add(tsp); glowSprites.push(tsp);
+}
+// 夜のヘッドライトが照らす地面・車の影
+const poolMat = litMat({ color: [0, 0, 0], additive: true, opacity: 0.999 });
+poolMat.fragmentShader = poolMat.fragmentShader.replace('gl_FragColor = vec4(applyFog(col, vW), uOpacity);',
+  'float e = 1.0 - smoothstep(0.2, 0.5, length((vUv - vec2(0.5, 0.42)) * vec2(1.6, 1.0))); gl_FragColor = vec4(vec3(1.0, 0.93, 0.78) * e * uOpacity, 1.0);');
+poolMat.uniforms.uOpacity.value = 0;
+const pool = new THREE.Mesh(new THREE.PlaneGeometry(9, 5).rotateX(-Math.PI / 2).translate(6.6, 0.06, 0), poolMat);
+car.add(pool);
+const shadowMat = new THREE.ShaderMaterial({
+  uniforms: { uK: { value: 0.5 } }, transparent: true, depthWrite: false,
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform float uK; varying vec2 vUv; void main(){ float d = length((vUv - 0.5) * vec2(2.0, 2.0)); gl_FragColor = vec4(0.0, 0.0, 0.0, uK * (1.0 - smoothstep(0.35, 1.0, d))); }`,
+});
+car.add(new THREE.Mesh(new THREE.PlaneGeometry(5.2, 2.5).rotateX(-Math.PI / 2).translate(0, 0.04, 0), shadowMat));
+
+// 車内：ダッシュボード・シート・ハンドル・お花・うさぎ
+const interior = new THREE.Group(); car.add(interior);
+const darkIn = litMat({ color: [0.07, 0.07, 0.08], interior: 1, spec: 0.1 });
+const seatMat = litMat({ color: [0.11, 0.11, 0.12], interior: 1, spec: 0.15 });
+interior.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 1.5).translate(0.6, 0.94, 0), darkIn));
+for (const sd of [1, -1]) {
+  interior.add(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.5).translate(-0.33, 0.6, sd * 0.38), seatMat));
+  interior.add(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.62, 0.48).translate(-0.6, 0.92, sd * 0.38).rotateZ(0), seatMat));
+  interior.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.3).translate(-0.62, 1.32, sd * 0.38), seatMat));
+}
+interior.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 1.3).translate(-1.2, 0.68, 0), seatMat));
+const steer = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 8, 28), darkIn);
+steer.position.set(0.22, 1.02, 0.38); steer.rotation.set(0, Math.PI / 2, 0); steer.rotateX(-0.45); interior.add(steer);
+// お花（ひまわり＋水色と黄緑のあじさい）
+const flowerGroup = new THREE.Group(); flowerGroup.position.set(0.5, 1.0, 0.22); interior.add(flowerGroup);
+const vaseMat = litMat({ color: [0.85, 0.92, 0.95], opacity: 0.45, spec: 1.2, gloss: 90, interior: 0.5 });
+flowerGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.024, 0.11, 16).translate(0, 0.055, 0), vaseMat));
+const stemMat = litMat({ color: [0.25, 0.5, 0.2], interior: 0.4 });
+for (const [dx, dz, h] of [[0, 0, 0.21], [0.01, 0.015, 0.16], [-0.01, -0.012, 0.14]]) {
+  const st2 = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, h, 6).translate(0, h / 2, 0), stemMat);
+  st2.position.set(dx, 0.04, dz); st2.rotation.z = dx * 8; flowerGroup.add(st2);
+}
+const sunflower = new THREE.Group(); sunflower.position.set(0.0, 0.25, 0.005);
+const petalMat = litMat({ color: [1.0, 0.76, 0.12], interior: 0.35, spec: 0.1 });
+const petalGeo = new THREE.SphereGeometry(1, 8, 6).scale(0.011, 0.034, 0.004);
+for (let i = 0; i < 16; i++) {
+  const a = i / 16 * Math.PI * 2, r = i % 2 ? 0.038 : 0.034;
+  const p = new THREE.Mesh(petalGeo, petalMat);
+  p.position.set(Math.sin(a) * r, Math.cos(a) * r, (i % 2) * 0.002); p.rotation.z = -a; sunflower.add(p);
+}
+sunflower.add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.01, 16).rotateX(Math.PI / 2), litMat({ color: [0.75, 0.55, 0.12], interior: 0.35 })));
+sunflower.rotation.set(0, Math.PI / 2, 0); sunflower.rotateX(-0.35);
+flowerGroup.add(sunflower);
+const floretGeo = new THREE.IcosahedronGeometry(0.017, 0);
+const hydBlue = litMat({ color: [0.68, 0.8, 0.95], interior: 0.35 }), hydGreen = litMat({ color: [0.8, 0.88, 0.55], interior: 0.35 });
+let fs = 11; const frnd = () => (fs = (fs * 16807) % 2147483647) / 2147483647;
+for (const [cx, cy, cz, mainBlue] of [[0.005, 0.17, -0.04, true], [0.012, 0.19, 0.035, false], [0.0, 0.13, 0.0, true]]) {
+  for (let i = 0; i < 16; i++) {
+    const u = frnd() * Math.PI * 2, v = Math.acos(frnd() * 2 - 1), r = 0.035 + frnd() * 0.012;
+    const m = new THREE.Mesh(floretGeo, (frnd() < 0.7) === mainBlue ? hydBlue : hydGreen);
+    m.position.set(cx + Math.sin(v) * Math.cos(u) * r * 0.7, cy + Math.cos(v) * r, cz + Math.sin(v) * Math.sin(u) * r);
+    m.rotation.set(frnd() * 3, frnd() * 3, 0); flowerGroup.add(m);
+  }
+}
+const leafMat = litMat({ color: [0.24, 0.52, 0.22], interior: 0.4, side: THREE.DoubleSide });
+for (const [x, y, z, rz] of [[0.0, 0.14, 0.06, -0.8], [0.0, 0.12, -0.06, 0.9]]) {
+  const l = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6).scale(0.008, 0.05, 0.02), leafMat);
+  l.position.set(x, y, z); l.rotation.x = rz; flowerGroup.add(l);
+}
+// うさぎの置物
+const rabbit = new THREE.Group(); rabbit.position.set(0.55, 1.0, -0.2); interior.add(rabbit);
+const whiteMat = litMat({ color: [0.95, 0.95, 0.92], interior: 0.35, spec: 0.3 });
+rabbit.add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.034, 0.065, 18).translate(0, 0.033, 0), whiteMat));
+for (const dz of [-0.012, 0.012]) {
+  const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.007, 0.04, 4, 8), whiteMat);
+  ear.position.set(0, 0.095, dz); ear.rotation.x = dz * 10; rabbit.add(ear);
+}
+
+// 走るコース（目の前の草原をゆったり周回）
+const carState = { s: 0, theta: Math.PI * 0.35, pos: new THREE.Vector3(), fwd: new THREE.Vector3(1, 0, 0), right: new THREE.Vector3(0, 0, 1), lastTrail: new THREE.Vector2(1e9, 1e9), vis: 1, speed: 0 };
+function pathAt(th, out) { return out.set(26 * Math.cos(th) + 2.5 * Math.sin(2 * th), 0, -30 + 11 * Math.sin(th) + 1.5 * Math.sin(3 * th)); }
+const _pa = new THREE.Vector3(), _pb = new THREE.Vector3();
+function updateCar(dt, env) {
+  const targetVis = params.car ? 1 : 0;
+  carState.vis += (targetVis - carState.vis) * (1 - Math.exp(-dt * 4));
+  car.visible = carState.vis > 0.02;
+  const v = params.car && !paused ? st.carSpeed * 14 : 0;
+  carState.speed = v;
+  if (v > 0) {
+    pathAt(carState.theta, _pa); pathAt(carState.theta + 0.001, _pb);
+    const dlen = _pb.distanceTo(_pa) / 0.001;
+    carState.theta += v * dt / dlen;
+    carState.s += v * dt;
+  }
+  pathAt(carState.theta, _pa); pathAt(carState.theta + 0.01, _pb);
+  const dir = _pb.sub(_pa).normalize();
+  const right = carState.right.set(-dir.z, 0, dir.x);
+  const h = (x, z) => heightAt(x, z);
+  const hf = h(_pa.x + dir.x * 1.27, _pa.z + dir.z * 1.27), hr = h(_pa.x - dir.x * 1.27, _pa.z - dir.z * 1.27);
+  const hR = h(_pa.x + right.x * 0.78, _pa.z + right.z * 0.78), hL = h(_pa.x - right.x * 0.78, _pa.z - right.z * 0.78);
+  const bob = Math.sin(carState.s * 2.7) * 0.008 * Math.min(1, v / 4);
+  carState.pos.set(_pa.x, (hf + hr + hR + hL) / 4 + bob, _pa.z);
+  carState.fwd.copy(dir);
+  car.position.copy(carState.pos);
+  car.rotation.set(-Math.atan2(hR - hL, 1.56), Math.atan2(-dir.z, dir.x), Math.atan2(hf - hr, 2.54), 'YZX');
+  for (const w of wheelSpin) w.rotation.z = -carState.s / WHEEL_R;
+  // 草をかき分ける
+  const k = params.car ? 1 : 0;
+  carTouch[0].set(_pa.x + dir.x * 1.1, _pa.z + dir.z * 1.1, k, 1.5);
+  carTouch[1].set(_pa.x - dir.x * 1.1, _pa.z - dir.z * 1.1, k, 1.5);
+  if (params.car && Math.hypot(_pa.x - carState.lastTrail.x, _pa.z - carState.lastTrail.y) > 1.0) {
+    carState.lastTrail.set(_pa.x, _pa.z);
+    touchIdx = (touchIdx + 1) % TOUCH_N;
+    touches[touchIdx].set(_pa.x - dir.x * 2.2, _pa.z - dir.z * 2.2, 0.8, 1.3);
+  }
+  // 夜はライト
+  const lamp = smoothstep(0.25, 0.8, env.night + st.overcast * 0.5 + st.rain * 0.3);
+  headMat.uniforms.uEmissive.value.setRGB(1.0, 0.95, 0.85).multiplyScalar(lamp * 1.6);
+  tailMat.uniforms.uEmissive.value.setRGB(0.9, 0.05, 0.05).multiplyScalar(lamp * 1.2);
+  glowSprites.forEach((sp, i) => { sp.material.opacity = lamp * (i % 2 ? 0.6 : 0.9); });
+  poolMat.uniforms.uOpacity.value = lamp * 0.35;
+  shadowMat.uniforms.uK.value = 0.25 + 0.3 * env.day * (1 - st.overcast * 0.6);
+}
+
+// =====================================================================
 //  ポストエフェクト（色調・実写のレンズ感・ブラウン管）
 // =====================================================================
 let rt = null;
@@ -1022,6 +1463,7 @@ const mix = (a, b, t) => a + (b - a) * t;
 //  カメラ操作 ＆ 草をなでる
 // =====================================================================
 const look = { yaw: 0, pitch: 0.1, tyaw: 0, tpitch: 0.1, fov: 42, tfov: 42 };
+const camRig = { pos: new THREE.Vector3(), init: false };
 const pointers = new Map();
 let dragging = false, lastX = 0, lastY = 0, pinchD = 0;
 let touchIdx = 0; const lastTouch = new THREE.Vector2(1e9, 1e9);
@@ -1093,6 +1535,13 @@ function startAudio() {
   const rlp = ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 6000;
   audio.rain = chain(noise(), [rhp, rlp], 0);
   audio.fx = ctx.createGain(); audio.fx.gain.value = 0.5; audio.fx.connect(audio.master);
+  // ビートルのエンジン音
+  const eo = ctx.createOscillator(); eo.type = 'sawtooth'; eo.frequency.value = 45;
+  const eo2 = ctx.createOscillator(); eo2.type = 'triangle'; eo2.frequency.value = 90;
+  const elp = ctx.createBiquadFilter(); elp.type = 'lowpass'; elp.frequency.value = 260;
+  const eg = ctx.createGain(); eg.gain.value = 0;
+  eo.connect(elp); eo2.connect(elp); elp.connect(eg); eg.connect(audio.master); eo.start(); eo2.start();
+  audio.engine = { eo, eo2, eg };
   audio.nextBird = 0; audio.nextCricket = 0;
 }
 function chirp(t0) {
@@ -1126,6 +1575,11 @@ function updateAudio(env) {
   audio.windF.frequency.setTargetAtTime(300 + 500 * st.wind * gust, now, 0.5);
   audio.rustle.gain.setTargetAtTime((0.006 + 0.05 * st.wind * gust) * (1 - U.uSnow.value * 0.8), now, 0.2);
   audio.rain.gain.setTargetAtTime(0.32 * st.rain, now, 0.5);
+  const cd = carState.pos.distanceTo(camera.position);
+  const ev = params.car ? (0.012 + 0.05 * Math.min(1, carState.speed / 10)) / (1 + cd / 9) : 0;
+  audio.engine.eg.gain.setTargetAtTime(ev, now, 0.3);
+  audio.engine.eo.frequency.setTargetAtTime(38 + carState.speed * 5, now, 0.4);
+  audio.engine.eo2.frequency.setTargetAtTime(76 + carState.speed * 10, now, 0.4);
   const winter = U.uSnow.value > 0.5;
   if (now > audio.nextBird) {
     if (env.day > 0.4 && st.rain < 0.3 && !winter) chirp(now + 0.05);
@@ -1141,7 +1595,7 @@ function updateAudio(env) {
 //  UI
 // =====================================================================
 const $ = id => document.getElementById(id);
-const sliders = ['time', 'wind', 'cloud', 'rainbow', 'season', 'real', 'crt'];
+const sliders = ['time', 'wind', 'cloud', 'rainbow', 'season', 'real', 'crt', 'carSpeed'];
 const SEASON_NAMES = ['春', '初夏', '夏', '晩夏', '秋', '晩秋', '冬', '早春'];
 function timeName(h) { return h < 4 ? '深夜' : h < 6 ? '夜明け' : h < 10 ? '朝' : h < 15 ? '昼' : h < 17 ? '午後' : h < 19.3 ? '夕方' : '夜'; }
 function hhmm(h) { const m = Math.floor(h * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
@@ -1150,7 +1604,7 @@ function syncUI() {
   for (const k of sliders) { $(k).value = params[k]; fillSlider($(k)); }
   $('v_time').textContent = hhmm(params.time) + '　' + timeName(params.time);
   $('v_wind').textContent = params.wind.toFixed(2);
-  $('v_cloud').textContent = params.cloud.toFixed(2);
+  $('v_cloud').textContent = params.cloud < 0.03 ? 'とまる' : params.cloud < 0.35 ? 'ゆっくり' : params.cloud < 0.65 ? 'ふつう' : params.cloud < 0.9 ? 'はやい' : '早回し';
   $('v_rainbow').textContent = params.rainbow < 0.01 ? 'なし' : params.rainbow.toFixed(2);
   $('v_season').textContent = SEASON_NAMES[Math.round(params.season * 2) % 8];
   $('v_real').textContent = Math.round(params.real * 100) + '%';
@@ -1159,13 +1613,19 @@ function syncUI() {
   $('t_auto').classList.toggle('on', params.auto);
   $('t_life').classList.toggle('on', params.life);
   $('t_meteor').classList.toggle('on', params.meteor);
+  $('t_car').classList.toggle('on', params.car);
+  $('v_car').textContent = params.carSpeed < 0.01 ? 'とまる' : Math.round(params.carSpeed * 14 * 3.6) + ' km/h';
+  document.querySelectorAll('#camMode button').forEach(b => b.classList.toggle('on', +b.dataset.c === params.cam));
   $('t_sound').classList.toggle('on', params.sound);
 }
 function clearPresetMark() { document.querySelectorAll('.preset').forEach(b => b.classList.remove('active')); }
 for (const k of sliders) $(k).addEventListener('input', e => { params[k] = parseFloat(e.target.value); clearPresetMark(); syncUI(); });
 document.querySelectorAll('#weather button').forEach(b => b.addEventListener('click', () => { params.weather = +b.dataset.w; clearPresetMark(); syncUI(); }));
+function setCam(c) { params.cam = c; look.tyaw = 0; look.tpitch = c === 0 ? 0.1 : 0; look.tfov = 42; if (c !== 0 && !params.car) params.car = true; syncUI(); }
+document.querySelectorAll('#camMode button').forEach(b => b.addEventListener('click', () => setCam(+b.dataset.c)));
 const toggle = (id, key, after) => $(id).addEventListener('click', () => { params[key] = !params[key]; syncUI(); after && after(); });
 toggle('t_auto', 'auto');
+toggle('t_car', 'car', () => { if (!params.car && params.cam !== 0) setCam(0); });
 toggle('t_life', 'life');
 toggle('t_meteor', 'meteor');
 toggle('t_sound', 'sound', () => { if (params.sound) { if (!audio.ctx) startAudio(); else audio.ctx.resume(); toast('環境音 ON'); } });
@@ -1211,7 +1671,7 @@ function frame() {
   }
   st.time = params.auto ? wrapLerp(st.time, params.time, 1 - Math.exp(-dt * 8), 24) : wrapLerp(st.time, params.time, k, 24);
   st.season = wrapLerp(st.season, params.season, k, 4);
-  for (const key of ['wind', 'cloud', 'rainbow', 'real', 'crt']) st[key] += (params[key] - st[key]) * k;
+  for (const key of ['wind', 'cloud', 'rainbow', 'real', 'crt', 'carSpeed']) st[key] += (params[key] - st[key]) * k;
   const W = [[0, 0, 0], [0.72, 0, 0], [1, 1, 0], [0.85, 0, 1]][params.weather];
   st.overcast += (W[0] - st.overcast) * kw; st.rain += (W[1] - st.rain) * kw; st.snowfall += (W[2] - st.snowfall) * kw;
   if (!paused) {
@@ -1223,16 +1683,34 @@ function frame() {
   // 風向きはゆっくり揺らぐ
   const wa = Math.PI * 0.87 + Math.sin(simTime * 0.05) * 0.25;
   U.uWindDir.value.set(Math.cos(wa), Math.sin(wa));
-  if (!paused) U.uCloudShift.value.addScaledVector(U.uWindDir.value, -dt * st.cloud * 0.03 - dt * 0.0006);
+  // 雲の流れ：上げるほど一気に速くなり、最大で早回し（タイムラプス）のような速さ
+  if (!paused) U.uCloudShift.value.addScaledVector(U.uWindDir.value, -dt * (0.003 + 0.22 * Math.pow(st.cloud, 1.5)));
   U.uTime.value = simTime;
 
   // カメラ
   look.yaw += (look.tyaw - look.yaw) * (1 - Math.exp(-dt * 8));
   look.pitch += (look.tpitch - look.pitch) * (1 - Math.exp(-dt * 8));
   look.fov += (look.tfov - look.fov) * (1 - Math.exp(-dt * 6));
-  const eye = mix(1.7, 1.05, smoothstep(0, 1, st.real));
-  camera.position.set(0, heightAt(0, 0) + eye + Math.sin(simTime * 0.5) * 0.015, 0);
-  camera.rotation.set(look.pitch + Math.sin(simTime * 0.31) * 0.002, look.yaw, 0, 'YXZ');
+  const env0 = { day: smoothstep(-0.06, 0.12, bodyDir(st.time, sunDir).y), night: 1 - smoothstep(-0.16, -0.02, sunDir.y) };
+  updateCar(dt, env0);
+  if (params.cam === 0) {
+    const eye = mix(1.7, 1.05, smoothstep(0, 1, st.real));
+    camera.position.set(0, heightAt(0, 0) + eye + Math.sin(simTime * 0.5) * 0.015, 0);
+    camera.rotation.set(look.pitch + Math.sin(simTime * 0.31) * 0.002, look.yaw, 0, 'YXZ');
+    camRig.init = false;
+  } else {
+    const f = carState.fwd, r = carState.right, P = carState.pos;
+    const o = params.cam === 1 ? [-7.5, 2.3, -1.2] : params.cam === 2 ? [0.6, 1.15, 6.2] : [6.8, 1.25, -0.6];   // [前, 上, 右]
+    const t = params.cam === 1 ? [3, 0.9, 0] : params.cam === 2 ? [0.2, 0.75, 0] : [0, 0.95, 0];
+    const cy = Math.cos(look.yaw), sy = Math.sin(look.yaw);
+    const of = o[0] * cy - o[2] * sy, orr = o[0] * sy + o[2] * cy;
+    const want = tmpV.set(P.x + f.x * of + r.x * orr, P.y + o[1] + look.pitch * 6, P.z + f.z * of + r.z * orr);
+    want.y = Math.max(want.y, heightAt(want.x, want.z) + 0.6);
+    if (!camRig.init) { camRig.pos.copy(want); camRig.init = true; }
+    camRig.pos.lerp(want, 1 - Math.exp(-dt * 5));
+    camera.position.copy(camRig.pos);
+    camera.lookAt(P.x + f.x * t[0], P.y + t[1], P.z + f.z * t[0]);
+  }
   camera.fov = look.fov; camera.updateProjectionMatrix();
   U.uCamPos.value.copy(camera.position);
   sky.position.copy(camera.position);
@@ -1311,7 +1789,7 @@ function frame() {
 }
 
 // 開発用：コンソールから oka.jump() で遷移を一瞬で終わらせる
-window.oka = { params, st, look, touches, jump() { Object.assign(st, { time: params.time, wind: params.wind, cloud: params.cloud, rainbow: params.rainbow, season: params.season, real: params.real, crt: params.crt }); const W = [[0, 0, 0], [0.72, 0, 0], [1, 1, 0], [0.85, 0, 1]][params.weather]; st.overcast = W[0]; st.rain = W[1]; st.snowfall = W[2]; st.snowAcc = W[2]; },
+window.oka = { params, st, look, touches, camRig, carState, jump() { Object.assign(st, { time: params.time, wind: params.wind, cloud: params.cloud, rainbow: params.rainbow, season: params.season, real: params.real, crt: params.crt }); const W = [[0, 0, 0], [0.72, 0, 0], [1, 1, 0], [0.85, 0, 1]][params.weather]; st.overcast = W[0]; st.rain = W[1]; st.snowfall = W[2]; st.snowAcc = W[2]; },
   bench(n = 20) { const gl = renderer.getContext(), px = new Uint8Array(4); const t0 = performance.now();
     for (let i = 0; i < n; i++) { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
     return (performance.now() - t0) / n; } };

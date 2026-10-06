@@ -1,0 +1,1384 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OKA — 丘の時間</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --panel: rgba(18, 26, 34, 0.62);
+    --panel-line: rgba(255, 255, 255, 0.12);
+    --text: rgba(255, 255, 255, 0.92);
+    --muted: rgba(255, 255, 255, 0.55);
+    --accent: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #3a78d8; color: var(--text);
+    font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  canvas#scene.dragging { cursor: grabbing; }
+
+  .shadowtext { text-shadow: 0 1px 12px rgba(0,0,0,0.35), 0 0 2px rgba(0,0,0,0.25); }
+
+  header.top { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 26px; pointer-events: none; z-index: 5; }
+  .logo { display: flex; align-items: baseline; gap: 14px; }
+  .logo b { font-size: 19px; letter-spacing: 0.32em; font-weight: 500; }
+  .logo span { font-size: 10px; letter-spacing: 0.3em; color: var(--muted); }
+  .top-right { display: flex; align-items: center; gap: 16px; pointer-events: auto; }
+  .clock { font-size: 11px; letter-spacing: 0.22em; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .clock i { width: 6px; height: 6px; border-radius: 50%; background: #fff; display: inline-block; opacity: .8; }
+  button.pill { font: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.10); border: 1px solid var(--panel-line);
+    border-radius: 999px; padding: 7px 15px; cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  button.pill:hover { background: rgba(255,255,255,0.2); }
+
+  .hero { position: fixed; left: 34px; bottom: 34px; z-index: 4; pointer-events: none; max-width: 52vw; }
+  .hero small { display: block; font-size: 10px; letter-spacing: 0.32em; color: var(--muted); margin-bottom: 14px; }
+  .hero h1 { margin: 0; font-weight: 400; font-size: clamp(24px, 3.2vw, 40px); letter-spacing: 0.18em; }
+  .hero p { margin: 16px 0 0; font-size: 12px; letter-spacing: 0.12em; color: var(--muted); }
+  .hero .credit { margin-top: 26px; font-size: 10.5px; }
+
+  .corner { position: fixed; right: 26px; bottom: 26px; z-index: 4; display: flex; gap: 10px; align-items: center; }
+  .iconbtn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,0.08);
+    border: 1px solid var(--panel-line); color: var(--text); cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .iconbtn:hover { background: rgba(255,255,255,0.2); }
+
+  aside.panel { position: fixed; top: 70px; right: 22px; width: 312px; max-height: calc(100vh - 140px); overflow-y: auto; z-index: 6;
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 18px; padding: 18px 18px 14px;
+    backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25); transition: opacity .35s ease, transform .35s ease; scrollbar-width: thin; }
+  aside.panel.hidden { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+  .panel h2 { margin: 0 0 14px; font-size: 13px; font-weight: 500; letter-spacing: 0.14em; display: flex; justify-content: space-between; }
+  .panel h2 span { color: var(--muted); font-size: 10px; letter-spacing: 0.2em; font-weight: 400; }
+  .presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 16px; }
+  .preset { font: inherit; background: transparent; border: 1px solid transparent; border-radius: 12px; padding: 8px 0 6px; color: var(--muted);
+    cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 10px; letter-spacing: .02em; }
+  .preset:hover { background: rgba(255,255,255,0.06); }
+  .preset.active { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.08); color: var(--text); }
+  .preset .dot { width: 26px; height: 18px; border-radius: 13px 13px 4px 4px; }
+
+  .row { margin: 0 0 13px; }
+  .row .lab { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.08em; margin-bottom: 7px; }
+  .row .lab em { font-style: normal; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .ends { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-top: 3px; letter-spacing: .05em; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; margin: 0; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, rgba(255,255,255,.85) var(--p,50%), rgba(255,255,255,.18) var(--p,50%)); border-radius: 2px; }
+  input[type=range]::-moz-range-track { height: 2px; background: rgba(255,255,255,.18); }
+  input[type=range]::-moz-range-progress { height: 2px; background: rgba(255,255,255,.85); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: #e9f2f0; margin-top: -5.5px; box-shadow: 0 0 0 4px rgba(255,255,255,0.08); }
+  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: #e9f2f0; border: none; }
+
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: rgba(255,255,255,0.06); border-radius: 10px; padding: 3px; }
+  .seg button { font: inherit; font-size: 11.5px; border: 0; background: transparent; color: var(--muted); padding: 6px 0; border-radius: 8px; cursor: pointer; }
+  .seg button.on { background: rgba(255,255,255,0.18); color: var(--text); }
+
+  .sep { height: 1px; background: var(--panel-line); margin: 14px 0; }
+  .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tog { font: inherit; font-size: 11.5px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid transparent; border-radius: 10px; color: var(--muted); cursor: pointer; }
+  .tog::after { content: ""; width: 22px; height: 12px; border-radius: 8px; background: rgba(255,255,255,.18); box-shadow: inset -10px 0 0 rgba(255,255,255,.0); transition: all .2s; }
+  .tog.on { color: var(--text); border-color: rgba(255,255,255,.14); }
+  .tog.on::after { background: rgba(255,255,255,.8); box-shadow: inset -10px 0 0 #9fd27a; }
+  .foot { display: flex; justify-content: space-between; margin-top: 12px; }
+  .foot button { font: inherit; font-size: 11.5px; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 2px; letter-spacing: .06em; }
+  .foot button:hover { color: var(--text); }
+
+  .toast { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); font-size: 12px; letter-spacing: .1em; padding: 8px 16px;
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 999px; z-index: 7; opacity: 0; transition: opacity .4s; pointer-events: none;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .toast.show { opacity: 1; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 20; color: #fff;
+    background: radial-gradient(ellipse at 50% 40%, #3a7fe0, #1d4fa8 70%, #163d86); transition: opacity 1.8s ease; cursor: default; }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  #loading.ready { cursor: pointer; }
+  .boot { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .boot b { font-size: 24px; font-weight: 500; letter-spacing: .4em; }
+  .boot span { font-size: 11px; letter-spacing: .3em; opacity: .7; }
+  #btnStart { font: inherit; font-size: 13px; letter-spacing: .2em; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.35);
+    border-radius: 999px; padding: 11px 26px; cursor: pointer; animation: breathe 2.4s ease-in-out infinite; }
+  #btnStart:hover { background: rgba(255,255,255,.22); }
+  @keyframes breathe { 50% { opacity: .55; } }
+
+  @media (max-width: 720px) {
+    header.top { padding: 14px 16px; }
+    .logo span { display: none; }
+    .hero { left: 16px; bottom: 76px; max-width: calc(100vw - 32px); }
+    .hero .credit { display: none; }
+    .corner { right: 16px; bottom: 18px; }
+    aside.panel { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: 56vh; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="loading">
+  <div class="boot">
+    <b>≋ OKA</b>
+    <span id="bootMsg">LOADING</span>
+    <button id="btnStart" hidden>クリックして はじめる</button>
+  </div>
+</div>
+<audio id="startupSound" src="startup.mp3" preload="auto"></audio>
+
+<header class="top shadowtext">
+  <div class="logo"><b>≋ OKA</b><span>HILL STUDY</span></div>
+  <div class="top-right">
+    <div class="clock"><i></i><span id="clockText">12:00</span></div>
+    <button class="pill" id="btnPanel">設定</button>
+  </div>
+</header>
+
+<div class="hero shadowtext">
+  <small>A STUDY IN WIND &amp; LIGHT</small>
+  <h1>ただ、丘を眺める。</h1>
+  <p>ドラッグで見渡す ・ ホイール / ピンチで近づく ・ マウスでなでると草がなびく</p>
+  <p class="credit">OKA · made with three.js</p>
+</div>
+
+<div class="corner">
+  <button class="pill" id="btnQuality">標準</button>
+  <button class="iconbtn" id="btnFull" title="全画面">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 5V1h4M11 1h4v4M15 11v4h-4M5 15H1v-4"/></svg>
+  </button>
+</div>
+
+<aside class="panel" id="panel">
+  <h2>丘の表情 <span>OKA — 01</span></h2>
+  <div class="presets" id="presets"></div>
+
+  <div class="row">
+    <div class="lab">時刻 <em id="v_time"></em></div>
+    <input type="range" id="time" min="0" max="23.99" step="0.01">
+  </div>
+  <div class="row">
+    <div class="lab">そよ風の強さ <em id="v_wind"></em></div>
+    <input type="range" id="wind" min="0" max="1" step="0.01">
+  </div>
+  <div class="row">
+    <div class="lab">雲のスピード <em id="v_cloud"></em></div>
+    <input type="range" id="cloud" min="0" max="1" step="0.01">
+  </div>
+  <div class="row">
+    <div class="lab">虹 <em id="v_rainbow"></em></div>
+    <input type="range" id="rainbow" min="0" max="1" step="0.01">
+  </div>
+  <div class="row">
+    <div class="lab">季節 <em id="v_season"></em></div>
+    <input type="range" id="season" min="0" max="3.99" step="0.01">
+    <div class="ends"><span>春</span><span>夏</span><span>秋</span><span>冬</span></div>
+  </div>
+  <div class="row">
+    <div class="lab">天気</div>
+    <div class="seg" id="weather">
+      <button data-w="0">晴れ</button><button data-w="1">くもり</button><button data-w="2">雨</button><button data-w="3">雪</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lab">実写度 <em id="v_real"></em></div>
+    <input type="range" id="real" min="0" max="1" step="0.01">
+    <div class="ends"><span>あの壁紙</span><span>実写</span></div>
+  </div>
+  <div class="row">
+    <div class="lab">懐かしさ（ブラウン管） <em id="v_crt"></em></div>
+    <input type="range" id="crt" min="0" max="1" step="0.01">
+  </div>
+
+  <div class="sep"></div>
+  <div class="toggles">
+    <button class="tog" id="t_auto">時間を進める</button>
+    <button class="tog" id="t_life">生き物</button>
+    <button class="tog" id="t_meteor">流れ星</button>
+    <button class="tog" id="t_sound">環境音</button>
+  </div>
+  <div class="foot">
+    <button id="btnPause">Ⅱ 一時停止</button>
+    <button id="btnReset">↺ リセット</button>
+  </div>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// =====================================================================
+//  パラメータ
+// =====================================================================
+const DEFAULTS = {
+  time: 13.0, wind: 0.35, cloud: 0.3, rainbow: 0, season: 0.6, weather: 0, real: 0, crt: 0,
+  auto: false, life: true, meteor: true, sound: false,
+};
+const params = { ...DEFAULTS };
+// 実際に画面に効いている値（なめらかに追従）
+const st = { time: params.time, wind: params.wind, cloud: params.cloud, rainbow: 0, season: params.season, real: 0, crt: 0,
+  overcast: 0, rain: 0, snowfall: 0, wet: 0, snowAcc: 0, life: 1, meteor: 1 };
+
+const PRESETS = [
+  { name: 'あの壁紙', grad: 'linear-gradient(#2f72e0 55%, #4fa52a 55%)', p: { time: 13, wind: 0.3, cloud: 0.3, rainbow: 0, season: 0.6, weather: 0, real: 0, crt: 0 } },
+  { name: '2001年', grad: 'linear-gradient(#3b6fb8 55%, #4c8a2d 55%)', p: { time: 12, wind: 0.3, cloud: 0.35, rainbow: 0, season: 0.6, weather: 0, real: 0, crt: 1 } },
+  { name: '雨あがり', grad: 'linear-gradient(#8fa7c4 30%, #e6a0d0 30%, #f2e38a 42%, #9fc4e8 50%, #6a9a48 50%)', p: { time: 16.6, wind: 0.25, cloud: 0.45, rainbow: 1, season: 0.9, weather: 0, real: 0.55, crt: 0 }, wet: 1 },
+  { name: '夕暮れ', grad: 'linear-gradient(#5a5b8c, #f09a5a 55%, #6b6a2c 55%)', p: { time: 17.55, wind: 0.45, cloud: 0.25, rainbow: 0, season: 1.3, weather: 0, real: 0.85, crt: 0 } },
+  { name: '冬の夜', grad: 'linear-gradient(#0b1430 55%, #c8d4e6 55%)', p: { time: 22.5, wind: 0.2, cloud: 0.2, rainbow: 0, season: 3.1, weather: 3, real: 0.7, crt: 0 } },
+];
+
+// =====================================================================
+//  地形（あの丘のかたち）
+// =====================================================================
+function smoothstep(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+function heightAt(x, z) {
+  let h = 0;
+  let dx = (x + 90) / 330, dz = (z + 390) / 225;
+  h += 47 * Math.exp(-(dx * dx + dz * dz));                     // メインの丘
+  dx = (x + 620) / 360; dz = (z + 520) / 300;
+  h += 34 * Math.exp(-(dx * dx + dz * dz));                     // 左へ続く尾根
+  h += 1.1 * Math.sin(x * 0.021 + 1.3) * Math.cos(z * 0.017) + 0.45 * Math.sin(x * 0.05 + z * 0.04);
+  h -= 0.7 * Math.exp(-((z + 42) * (z + 42)) / 26);             // 手前の小さな溝
+  dx = (x - 1500) / 650; dz = (z + 2700) / 420;
+  h += 120 * Math.exp(-(dx * dx + dz * dz));                    // 遠くの山（右奥）
+  dx = (x - 2600) / 500; dz = (z + 2300) / 380;
+  h += 90 * Math.exp(-(dx * dx + dz * dz));
+  const r = Math.hypot(x, z), a = Math.atan2(z, x);
+  h += smoothstep(1300, 2900, r) * (55 + 35 * Math.sin(a * 5 + 1) + 20 * Math.sin(a * 11));
+  return h;
+}
+
+// =====================================================================
+//  共通 GLSL
+// =====================================================================
+const COMMON = /* glsl */`
+uniform float uTime;
+uniform vec3 uLightDir;
+uniform vec3 uLightColor;
+uniform vec3 uAmbient;
+uniform vec3 uFogColor;
+uniform float uFogDensity;
+uniform float uRealism;
+uniform float uWind;
+uniform vec2 uWindDir;
+uniform vec2 uCloudShift;
+uniform float uCloudCover;
+uniform float uSnow;
+uniform float uWet;
+uniform vec3 uCamPos;
+
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float hash13(vec3 p3){ p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
+vec3 hash33(vec3 p3){ p3 = fract(p3 * vec3(.1031, .1030, .0973)); p3 += dot(p3, p3.yxz + 33.33); return fract((p3.xxy + p3.yxx) * p3.zyx); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y); }
+float fbm3(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 3; i++){ s += a * vnoise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p + 3.1; a *= .5; } return s / .875; }
+float fbm5(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * vnoise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p + 3.1; a *= .5; } return s / .96875; }
+
+const float CLOUD_H = 700.0;
+float cloudDensity(vec2 wp, bool hq){
+  vec2 p = wp * 0.0024 + uCloudShift;
+  float n = hq ? fbm5(p) : fbm3(p);
+  n += 0.08 * (vnoise(p * 3.1 - uCloudShift * 0.7 + uTime * 0.004) - 0.5);
+  float cov = uCloudCover;
+  float soft = mix(0.16, 0.30, uRealism);
+  return smoothstep(1.0 - cov, 1.0 - cov + soft, n);
+}
+float cloudShadow(vec3 P){
+  if (uLightDir.y < 0.03) return 1.0;
+  vec2 wp = P.xz + uLightDir.xz / uLightDir.y * (CLOUD_H - P.y);
+  return 1.0 - 0.62 * cloudDensity(wp, false);
+}
+vec3 applyFog(vec3 col, vec3 wpos){
+  float d = length(wpos - uCamPos);
+  float f = 1.0 - exp(-d * uFogDensity);
+  return mix(col, uFogColor, f);
+}
+float gustAt(vec2 wp){
+  float speed = 0.8 + uWind * 3.0;
+  float g = vnoise(wp * 0.045 - uWindDir * uTime * speed * 0.06 * 10.0 * 0.1);
+  g = 0.6 * g + 0.4 * vnoise(wp * 0.11 - uWindDir * uTime * speed * 0.16);
+  return smoothstep(0.3, 0.8, g);
+}
+vec2 windBend(vec2 wp, float rnd){
+  float g = gustAt(wp);
+  float f = sin(uTime * (1.6 + uWind * 4.5) + rnd * 6.283 + dot(wp, uWindDir) * 0.7);
+  float amp = 0.05 + uWind * (0.22 + 0.85 * g);
+  vec2 perp = vec2(-uWindDir.y, uWindDir.x);
+  return uWindDir * (amp + f * 0.07 * (0.25 + uWind)) + perp * f * 0.04 * (0.25 + uWind);
+}
+`;
+
+// =====================================================================
+//  renderer / scene / camera
+// =====================================================================
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // シェーダーで色を直接決める
+renderer.autoClear = true;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.05, 12000);
+
+const U = {
+  uTime: { value: 0 }, uLightDir: { value: new THREE.Vector3(0, 1, 0) }, uLightColor: { value: new THREE.Color(1, 1, 1) },
+  uAmbient: { value: new THREE.Color(0.4, 0.5, 0.6) }, uFogColor: { value: new THREE.Color(0.6, 0.7, 0.9) }, uFogDensity: { value: 0.0003 },
+  uRealism: { value: 0 }, uWind: { value: 0.3 }, uWindDir: { value: new THREE.Vector2(-0.92, 0.38).normalize() },
+  uCloudShift: { value: new THREE.Vector2(0, 0) }, uCloudCover: { value: 0.4 }, uSnow: { value: 0 }, uWet: { value: 0 },
+  uCamPos: { value: new THREE.Vector3() },
+};
+
+// ---------------------------------------------------------------------
+//  空
+// ---------------------------------------------------------------------
+const skyU = {
+  ...U,
+  uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunDir: { value: new THREE.Vector3() },
+  uSunColor: { value: new THREE.Color() }, uMoonDir: { value: new THREE.Vector3() }, uNight: { value: 0 }, uDay: { value: 1 },
+  uCloudLit: { value: new THREE.Color() }, uCloudDark: { value: new THREE.Color() }, uRainbow: { value: 0 }, uOvercast: { value: 0 },
+  uMeteorA: { value: new THREE.Vector3() }, uMeteorB: { value: new THREE.Vector3() }, uMeteorT: { value: -1 }, uStarRot: { value: 0 },
+};
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: skyU, side: THREE.BackSide, depthWrite: false,
+  vertexShader: /* glsl */`
+    varying vec3 vDir;
+    void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: COMMON + /* glsl */`
+    uniform vec3 uZenith, uHorizon, uSunDir, uSunColor, uMoonDir, uCloudLit, uCloudDark, uMeteorA, uMeteorB;
+    uniform float uNight, uDay, uRainbow, uOvercast, uMeteorT, uStarRot;
+    varying vec3 vDir;
+    vec3 hue(float h){ return clamp(abs(mod(h * 6.0 + vec3(0., 4., 2.), 6.0) - 3.0) - 1.0, 0., 1.); }
+    void main(){
+      vec3 d = normalize(vDir);
+      float h = d.y;
+      float hp = max(h, 0.0);
+      vec3 col = mix(uHorizon, uZenith, pow(hp, mix(0.45, 0.6, uRealism)));
+      col = mix(col, uHorizon * 0.92, smoothstep(0.0, -0.08, h));
+
+      // 太陽
+      float sd = max(dot(d, uSunDir), 0.0);
+      col += uSunColor * (pow(sd, 6.0) * 0.22 + pow(sd, 60.0) * 0.35) * uDay * (1.0 - 0.7 * uOvercast);
+      col += uSunColor * smoothstep(0.99955, 0.9998, sd) * 3.0 * (1.0 - uOvercast);
+
+      // 星・天の川・月
+      if (uNight > 0.01 && h > -0.02) {
+        float cr = cos(uStarRot), sr = sin(uStarRot);
+        vec3 sdir = vec3(cr * d.x - sr * d.z, d.y, sr * d.x + cr * d.z);
+        vec3 sp = sdir * 260.0;
+        vec3 cell = floor(sp);
+        float rnd = hash13(cell);
+        vec3 cpos = cell + 0.25 + 0.5 * hash33(cell);
+        float star = smoothstep(0.32, 0.0, length(sp - cpos)) * step(0.955, rnd);
+        float tw = 0.65 + 0.35 * sin(uTime * (2.0 + rnd * 4.0) + rnd * 50.0);
+        vec3 starCol = mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.9, 0.75), fract(rnd * 13.1));
+        float band = exp(-pow(dot(sdir, normalize(vec3(0.35, 0.55, -0.75))) * 3.2, 2.0));
+        float milky = band * fbm3(sdir.xz / (abs(sdir.y) + 0.6) * 6.0) * mix(0.10, 0.22, uRealism);
+        float vis = uNight * (1.0 - uOvercast * 0.9) * smoothstep(-0.02, 0.12, h);
+        col += (starCol * star * tw * 1.4 + vec3(0.55, 0.6, 0.8) * milky) * vis;
+        float md = dot(d, uMoonDir);
+        col += vec3(1.0, 0.97, 0.88) * smoothstep(0.99962, 0.99975, md) * 1.2 * uNight * (1.0 - 0.8 * uOvercast);
+        col += vec3(0.5, 0.6, 0.85) * pow(max(md, 0.0), 300.0) * 0.25 * uNight;
+      }
+
+      // 雲
+      float cloudA = 0.0;
+      if (h > 0.0) {
+        vec2 wp = uCamPos.xz + d.xz * (CLOUD_H - uCamPos.y) / max(h, 0.015);
+        float c = cloudDensity(wp, true);
+        float c2 = cloudDensity(wp + uSunDir.xz * 90.0, true);
+        float lit = clamp(0.62 + (c - c2) * 2.2, 0.15, 1.25);
+        vec3 cc = mix(uCloudDark, uCloudLit, lit);
+        cc += uSunColor * pow(sd, 10.0) * 0.6 * (1.0 - c) * uDay;     // 縁が光る
+        // 巻雲（すじ雲）
+        vec2 q = wp * 0.0016 + uCloudShift * 0.6;
+        float ci = fbm3(vec2(q.x * 0.35 + q.y * 0.25, q.y * 2.6 - q.x * 0.6) * 1.3);
+        float wisp = smoothstep(0.58, 0.82, ci) * 0.45 * (1.0 - uOvercast) * smoothstep(0.08, 0.35, h);
+        float fade = smoothstep(0.0, 0.11, h);
+        cloudA = clamp(c + wisp * (1.0 - c), 0.0, 1.0) * fade;
+        cc = mix(cc, uHorizon, (1.0 - smoothstep(0.0, 0.3, h)) * 0.55);
+        col = mix(col, cc, cloudA);
+      }
+
+      // 虹
+      if (uRainbow > 0.001) {
+        vec3 rc = normalize(vec3(0.05, -0.30, -1.0));
+        float ang = degrees(acos(clamp(dot(d, rc), -1., 1.)));
+        float x = (ang - 40.2) / 2.4;
+        float a1 = smoothstep(0.0, 0.18, x) * smoothstep(1.0, 0.8, x);
+        vec3 bow = hue((1.0 - clamp(x, 0., 1.)) * 0.8) * a1;
+        float x2 = (ang - 50.5) / 3.2;
+        float a2 = smoothstep(0.0, 0.2, x2) * smoothstep(1.0, 0.8, x2);
+        bow += hue(clamp(x2, 0., 1.) * 0.8) * a2 * 0.35;
+        float inner = smoothstep(40.5, 30.0, ang) * 0.05;
+        float vis = uRainbow * uDay * (1.0 - cloudA * 0.6) * smoothstep(-0.02, 0.05, h);
+        col += (bow * mix(0.55, 0.32, uRealism) + inner) * vis;
+      }
+
+      // 流れ星
+      if (uMeteorT >= 0.0) {
+        float p = uMeteorT;
+        vec3 head = normalize(mix(uMeteorA, uMeteorB, p));
+        vec3 tail = normalize(mix(uMeteorA, uMeteorB, max(p - 0.4, 0.0)));
+        vec3 ba = head - tail;
+        float k = clamp(dot(d - tail, ba) / max(dot(ba, ba), 1e-6), 0., 1.);
+        float dist = length(d - tail - ba * k);
+        float m = smoothstep(0.0022, 0.0, dist) * k * k * sin(3.14159 * p);
+        col += vec3(1.0, 0.95, 0.85) * m * 2.2 * uNight * (1.0 - uOvercast);
+      }
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(9000, 64, 32), skyMat);
+sky.renderOrder = -10;
+scene.add(sky);
+
+// ---------------------------------------------------------------------
+//  地面
+// ---------------------------------------------------------------------
+const groundU = { ...U, uGrassBase: { value: new THREE.Color() }, uGrassTip: { value: new THREE.Color() }, uGrassRadius: { value: 55 } };
+function buildTerrain() {
+  const N = 340, EXT = 4200;
+  const pos = new Float32Array(N * N * 3), nor = new Float32Array(N * N * 3);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const u = i / (N - 1) * 2 - 1, v = j / (N - 1) * 2 - 1;
+    const x = Math.sign(u) * Math.pow(Math.abs(u), 2.2) * EXT;
+    const z = Math.sign(v) * Math.pow(Math.abs(v), 2.2) * EXT;
+    const k = (j * N + i) * 3;
+    pos[k] = x; pos[k + 1] = heightAt(x, z); pos[k + 2] = z;
+    const e = 0.6;
+    const nx = heightAt(x - e, z) - heightAt(x + e, z), nz = heightAt(x, z - e) - heightAt(x, z + e);
+    const l = Math.hypot(nx, 2 * e, nz);
+    nor[k] = nx / l; nor[k + 1] = 2 * e / l; nor[k + 2] = nz / l;
+  }
+  const idx = new Uint32Array((N - 1) * (N - 1) * 6);
+  let p = 0;
+  for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
+    const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
+    idx[p++] = a; idx[p++] = c; idx[p++] = b; idx[p++] = b; idx[p++] = c; idx[p++] = d;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  return g;
+}
+const groundMat = new THREE.ShaderMaterial({
+  uniforms: groundU,
+  vertexShader: /* glsl */`
+    varying vec3 vW; varying vec3 vN;
+    void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normal; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: COMMON + /* glsl */`
+    uniform vec3 uGrassBase, uGrassTip; uniform float uGrassRadius;
+    varying vec3 vW; varying vec3 vN;
+    void main(){
+      vec3 N = normalize(vN);
+      vec2 wp = vW.xz;
+      float dc = length(wp - uCamPos.xz);
+      float n1 = fbm3(wp * 0.012);
+      float n2 = vnoise(wp * 0.25);
+      float n3 = vnoise(wp * 1.7);
+      vec3 col = mix(uGrassBase, uGrassTip, clamp(0.58 + 0.42 * (n1 - 0.5) * mix(1.0, 1.8, uRealism) + 0.12 * (n2 - 0.5), 0., 1.));
+      float rows = 0.5 + 0.5 * sin(wp.x * 0.9 + wp.y * 0.15 + n1 * 6.0);
+      col *= 1.0 - 0.05 * rows * smoothstep(400.0, 40.0, dc);
+      col *= 0.94 + 0.12 * n3 * smoothstep(120.0, 10.0, dc);
+      float near = 1.0 - smoothstep(uGrassRadius * 0.3, uGrassRadius * 1.0, dc);
+      col = mix(col, uGrassBase * mix(0.7, 0.4, uRealism), near * mix(0.3, 0.75, uRealism));
+      float g = gustAt(wp);
+      col *= 1.0 + uWind * 0.22 * (g - 0.45) * (1.0 - uSnow);
+      // 斜面の向きで少しコントラスト
+      col *= mix(1.0, 0.85 + 0.3 * N.y, 0.5);
+      // 雪
+      float sn = uSnow * smoothstep(0.35, 0.8, N.y + (n2 - 0.5) * 0.4 + uSnow * 0.3);
+      col = mix(col, vec3(0.93, 0.95, 1.0), sn);
+      col *= 1.0 - uWet * 0.22 * (1.0 - sn);
+      float sh = cloudShadow(vW);
+      float ndl = max(dot(N, uLightDir), 0.0);
+      vec3 lit = col * (uAmbient * 0.75 + uLightColor * ndl * sh * 0.95);
+      lit += uLightColor * sn * pow(n3, 30.0) * 0.6 * sh;              // 雪のきらめき
+      lit = applyFog(lit, vW);
+      gl_FragColor = vec4(lit, 1.0);
+    }`,
+});
+const ground = new THREE.Mesh(buildTerrain(), groundMat);
+ground.frustumCulled = false;
+scene.add(ground);
+
+// ---------------------------------------------------------------------
+//  草
+// ---------------------------------------------------------------------
+const TOUCH_N = 14;
+const touches = Array.from({ length: TOUCH_N }, () => new THREE.Vector4(0, 0, 0, 1));
+const grassU = {
+  ...U, uGrassBase: groundU.uGrassBase, uGrassTip: groundU.uGrassTip, uGrassRadius: groundU.uGrassRadius,
+  uGrassDry: { value: new THREE.Color(0.8, 0.72, 0.46) }, uDryAmount: { value: 0.05 }, uTouch: { value: touches },
+  uFlowerAmount: { value: 0.5 },
+};
+function bladeGeometry(segs) {
+  const pos = [], idx = [];
+  for (let i = 0; i < segs; i++) {
+    const t = i / segs, w = 0.5 * Math.pow(1 - t, 0.75);
+    pos.push(-w, t, 0, w, t, 0);
+  }
+  pos.push(0, 1, 0);
+  for (let i = 0; i < segs - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  const a = (segs - 1) * 2; idx.push(a, a + 1, segs * 2);
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
+}
+const grassMat = new THREE.ShaderMaterial({
+  uniforms: grassU, side: THREE.DoubleSide,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec4 aOffset; attribute vec4 aParams;
+    uniform vec3 uGrassBase, uGrassTip, uGrassDry; uniform float uDryAmount, uGrassRadius;
+    uniform vec4 uTouch[${TOUCH_N}];
+    varying vec3 vColor;
+    void main(){
+      vec3 off = aOffset.xyz; float rnd = aOffset.w;
+      float t = position.y;
+      float dist = length(off.xz - uCamPos.xz);
+      float edge = 1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius, dist);
+      float tall = mix(0.22, 0.72, uRealism) * mix(1.0, 0.75 + 0.5 * fract(rnd * 91.7), uRealism);
+      tall *= mix(1.0, 0.45 + 0.55 * smoothstep(0.6, 4.0, dist), uRealism);
+      float poke = step(0.93, fract(rnd * 53.1));                      // 雪から顔を出す草
+      float H = aParams.y * tall * (1.0 - uSnow * mix(1.0, 0.7, poke)) * edge;
+      float W = aParams.z * mix(0.6, 0.8, uRealism) * (1.0 + dist * 0.05);
+      float ca = cos(aParams.x), sa = sin(aParams.x);
+      vec3 side = vec3(ca, 0.0, sa);
+
+      vec2 bend = windBend(off.xz, rnd) * mix(0.8, 1.15, uRealism);
+      vec2 push = vec2(0.0);
+      for (int i = 0; i < ${TOUCH_N}; i++) {
+        vec4 tp = uTouch[i];
+        vec2 dv = off.xz - tp.xy; float d = length(dv);
+        push += dv / (d + 0.08) * tp.z * (1.0 - smoothstep(0.0, tp.w, d));
+      }
+      bend += push * 1.25;
+      float combed = min(length(push), 1.0);
+      bend += vec2(cos(rnd * 40.0), sin(rnd * 40.0)) * mix(0.12, 0.38, uRealism) * fract(rnd * 7.7);
+      float bl = length(bend);
+      if (bl > 1.25) { bend *= 1.25 / bl; bl = 1.25; }
+      float curve = t * t;
+      vec3 p = off + side * position.x * W;
+      p.xz += bend * curve * H;
+      p.y += t * H * sqrt(max(1.0 - 0.55 * bl * bl * t * t, 0.15));
+
+      // 色
+      float v = fract(rnd * 7.13);
+      vec3 base = uGrassBase * (0.8 + 0.4 * v);
+      vec3 tip = uGrassTip * (0.85 + 0.3 * fract(rnd * 3.71));
+      vec3 col = mix(base, tip, smoothstep(0.0, 1.0, t));
+      if (aParams.w < uDryAmount) col = mix(col, uGrassDry * (0.75 + 0.4 * v), 0.85 * smoothstep(0.1, 0.6, t + 0.2));
+      col *= 0.86 + 0.28 * vnoise(off.xz * 0.07);
+      float g = gustAt(off.xz);
+      col *= 1.0 + 0.16 * g * uWind + 0.3 * combed * t;
+      col = mix(col, uGrassDry * 0.7, uSnow * 0.7);
+      col = mix(col, vec3(0.92, 0.95, 1.0), uSnow * 0.5 * t);
+      col *= mix(mix(0.62, 1.0, t), mix(0.38, 1.08, t * t), uRealism);   // 根元の影
+      col *= 1.0 - uWet * 0.18;
+
+      // ライティング（頂点ごと）
+      vec3 face = vec3(-sa, 0.0, ca);
+      if (dot(face, uLightDir) < 0.0) face = -face;
+      vec3 N = normalize(vec3(0.0, 1.0, 0.0) * 0.75 + face * 0.55 + vec3(bend.x, 0.0, bend.y) * 0.25);
+      float sh = cloudShadow(p);
+      float ndl = max(dot(N, uLightDir), 0.0);
+      vec3 vdir = normalize(p - uCamPos);
+      float back = pow(max(dot(vdir, uLightDir), 0.0), 4.0);
+      vec3 lit = col * (uAmbient * 0.78 + uLightColor * ndl * sh * 0.9);
+      lit += uLightColor * col * back * 1.1 * t * sh * smoothstep(0.0, 0.2, uLightDir.y);
+      lit += uLightColor * pow(max(dot(reflect(vdir, N), uLightDir), 0.0), 16.0) * 0.12 * t * sh * (uRealism + uWet);
+      vColor = applyFog(lit, p);
+      gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    varying vec3 vColor;
+    void main(){ gl_FragColor = vec4(vColor, 1.0); }`,
+});
+
+// 花
+const flowerMat = new THREE.ShaderMaterial({
+  uniforms: grassU, side: THREE.DoubleSide,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec4 aOffset; attribute vec4 aParams;
+    uniform float uFlowerAmount, uGrassRadius;
+    varying vec3 vColor;
+    void main(){
+      vec3 off = aOffset.xyz; float rnd = aOffset.w;
+      float dist = length(off.xz - uCamPos.xz);
+      float show = smoothstep(rnd - 0.04, rnd, uFlowerAmount) * (1.0 - smoothstep(uGrassRadius * 0.5, uGrassRadius * 0.75, dist)) * (1.0 - uSnow);
+      float H = mix(0.2, 0.8, uRealism) * aParams.y;
+      float s = aParams.z * show * (1.0 + dist * 0.03) * mix(1.0, 1.25, uRealism);
+      vec2 bend = windBend(off.xz, rnd) * 0.9;
+      vec3 p = off + vec3(bend.x * H, H * (1.0 - 0.3 * dot(bend, bend)), bend.y * H);
+      vec3 lp = position * s;
+      float tilt = 0.5 * aParams.x;
+      lp = vec3(lp.x, lp.y * cos(tilt) - lp.z * sin(tilt), lp.y * sin(tilt) + lp.z * cos(tilt));
+      p += lp;
+      vec3 c = aParams.w < 0.78 ? vec3(1.0, 0.82, 0.08) : vec3(0.98, 0.97, 0.92);
+      c *= mix(1.0, 0.9, uRealism);
+      float sh = cloudShadow(p);
+      vec3 lit = c * (uAmbient * 0.9 + uLightColor * max(uLightDir.y, 0.0) * sh);
+      vColor = applyFog(lit, p);
+      gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: /* glsl */`varying vec3 vColor; void main(){ gl_FragColor = vec4(vColor, 1.0); }`,
+});
+
+let grassMesh = null, flowerMesh = null;
+const GRASS_R = 55;
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function buildGrass(count) {
+  if (grassMesh) { scene.remove(grassMesh); grassMesh.geometry.dispose(); }
+  if (flowerMesh) { scene.remove(flowerMesh); flowerMesh.geometry.dispose(); }
+  const R = rng(7);
+  const g = bladeGeometry(5);
+  const off = new Float32Array(count * 4), par = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    const r = 0.6 + GRASS_R * Math.pow(R(), 0.72), a = R() * Math.PI * 2;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    off.set([x, heightAt(x, z), z, R()], i * 4);
+    par.set([R() * Math.PI, 0.6 + R() * 0.8, 0.035 + R() * 0.035, R()], i * 4);
+  }
+  g.setAttribute('aOffset', new THREE.InstancedBufferAttribute(off, 4));
+  g.setAttribute('aParams', new THREE.InstancedBufferAttribute(par, 4));
+  g.instanceCount = count;
+  grassMesh = new THREE.Mesh(g, grassMat);
+  grassMesh.frustumCulled = false;
+  scene.add(grassMesh);
+
+  const fc = Math.round(count / 30);
+  const fg = new THREE.InstancedBufferGeometry();
+  const petal = new THREE.CircleGeometry(0.5, 7).rotateX(-Math.PI / 2);
+  fg.index = petal.index; fg.setAttribute('position', petal.getAttribute('position'));
+  const fo = new Float32Array(fc * 4), fp = new Float32Array(fc * 4);
+  for (let i = 0; i < fc; i++) {
+    const r = 3.5 + GRASS_R * 0.7 * Math.pow(R(), 0.8), a = R() * Math.PI * 2;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    fo.set([x, heightAt(x, z), z, R()], i * 4);
+    fp.set([R() * 2 - 1, 0.55 + R() * 0.6, 0.045 + R() * 0.03, R()], i * 4);
+  }
+  fg.setAttribute('aOffset', new THREE.InstancedBufferAttribute(fo, 4));
+  fg.setAttribute('aParams', new THREE.InstancedBufferAttribute(fp, 4));
+  fg.instanceCount = fc;
+  flowerMesh = new THREE.Mesh(fg, flowerMat);
+  flowerMesh.frustumCulled = false;
+  scene.add(flowerMesh);
+}
+
+// ---------------------------------------------------------------------
+//  雨・雪
+// ---------------------------------------------------------------------
+const precipU = { ...U, uRain: { value: 0 }, uSnowFall: { value: 0 } };
+const rainGeo = (() => {
+  const n = 7000, pos = new Float32Array(n * 2 * 3), seed = new Float32Array(n * 2 * 4); const R = rng(11);
+  for (let i = 0; i < n; i++) {
+    const s = [R(), R(), R(), R()];
+    for (let e = 0; e < 2; e++) { seed.set(s, (i * 2 + e) * 4); pos[(i * 2 + e) * 3 + 1] = e; }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  return g;
+})();
+const rainMat = new THREE.ShaderMaterial({
+  uniforms: precipU, transparent: true, depthWrite: false,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec4 aSeed; uniform float uRain; varying float vA;
+    void main(){
+      vec3 box = vec3(50.0, 26.0, 50.0);
+      vec3 p = (aSeed.xyz - 0.5) * box;
+      p.y = mod(aSeed.y * box.y - uTime * (18.0 + aSeed.w * 6.0), box.y) - 4.0;
+      vec3 vel = normalize(vec3(uWindDir.x * (0.15 + uWind * 0.6), -1.0, uWindDir.y * (0.15 + uWind * 0.6)));
+      p.xz += uCamPos.xz - vel.xz / vel.y * p.y * 0.0;
+      p -= vel * position.y * (0.55 + aSeed.w * 0.4);
+      p.y += uCamPos.y;
+      vA = uRain * step(aSeed.w, uRain) * (0.25 + 0.3 * aSeed.z);
+      gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uAmbient; varying float vA;
+    void main(){ gl_FragColor = vec4(mix(vec3(0.75, 0.8, 0.88), uAmbient * 2.2, 0.5), vA); }`,
+});
+const rain = new THREE.LineSegments(rainGeo, rainMat); rain.frustumCulled = false; scene.add(rain);
+
+const snowGeo = (() => {
+  const n = 16000, pos = new Float32Array(n * 3), seed = new Float32Array(n * 4); const R = rng(23);
+  for (let i = 0; i < n; i++) seed.set([R(), R(), R(), R()], i * 4);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  return g;
+})();
+const snowMat = new THREE.ShaderMaterial({
+  uniforms: { ...precipU, uPR: { value: 1 } }, transparent: true, depthWrite: false,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec4 aSeed; uniform float uSnowFall, uPR; varying float vA;
+    void main(){
+      vec3 box = vec3(90.0, 30.0, 90.0);
+      vec3 p = (aSeed.xyz - 0.5) * box;
+      float fall = uTime * (0.9 + aSeed.w * 0.8);
+      p.y = mod(aSeed.y * box.y - fall, box.y) - 4.0;
+      vec2 drift = uWindDir * uTime * (0.5 + uWind * 3.0);
+      p.xz = mod(p.xz + drift + box.xz * 0.5, box.xz) - box.xz * 0.5;
+      p.x += sin(uTime * 0.9 + aSeed.z * 30.0) * 0.6; p.z += cos(uTime * 0.7 + aSeed.x * 30.0) * 0.6;
+      p.xz += uCamPos.xz; p.y += uCamPos.y;
+      vec4 mv = viewMatrix * vec4(p, 1.0);
+      gl_PointSize = min((0.03 + 0.03 * aSeed.w) * 900.0 / -mv.z, 9.0) * uPR;
+      vA = uSnowFall * step(aSeed.w * 0.95, uSnowFall) * smoothstep(0.3, 1.5, -mv.z) * (1.0 - smoothstep(25.0, 45.0, -mv.z));
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    varying float vA;
+    void main(){ float d = length(gl_PointCoord - 0.5); gl_FragColor = vec4(vec3(1.0), vA * smoothstep(0.5, 0.15, d) * 0.9); }`,
+});
+const snow = new THREE.Points(snowGeo, snowMat); snow.frustumCulled = false; scene.add(snow);
+
+// ---------------------------------------------------------------------
+//  生き物：ちょうちょ・鳥・ホタル
+// ---------------------------------------------------------------------
+function wingGeometry(shape) {
+  const g = new THREE.BufferGeometry();
+  // shape 0 = ちょうちょ（四角い羽2枚）, 1 = 鳥（V字）
+  const v = shape === 0
+    ? [0, 0, 0.5, 1, 0, 0.7, 0, 0, -0.4,   0, 0, -0.4, 1, 0, 0.7, 0.8, 0, -0.6,
+       0, 0, 0.5, 0, 0, -0.4, -1, 0, 0.7,  0, 0, -0.4, -0.8, 0, -0.6, -1, 0, 0.7]
+    : [0, 0, 0.3, 1, 0, -0.2, 0, 0, -0.25,  0, 0, 0.3, 0, 0, -0.25, -1, 0, -0.2];
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  return g;
+}
+const critterMatFor = (flapSpeed, flapAmp) => new THREE.ShaderMaterial({
+  uniforms: { ...U, uVis: { value: 0 } }, side: THREE.DoubleSide, transparent: true,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec3 aColor; attribute float aRand; uniform float uVis; varying vec3 vColor; varying float vA;
+    void main(){
+      vec3 p = position;
+      float ang = sin(uTime * ${flapSpeed.toFixed(1)} * (0.85 + aRand * 0.3) + aRand * 40.0) * ${flapAmp.toFixed(2)};
+      float s = sign(p.x);
+      p = vec3(p.x * cos(ang), abs(p.x) * sin(ang), p.z);
+      vec4 w = modelMatrix * instanceMatrix * vec4(p, 1.0);
+      vec3 lit = aColor * (uAmbient * 0.9 + uLightColor * 0.8);
+      vColor = applyFog(lit, w.xyz);
+      vA = uVis;
+      gl_Position = projectionMatrix * viewMatrix * w;
+    }`,
+  fragmentShader: /* glsl */`varying vec3 vColor; varying float vA; void main(){ if (vA < 0.01) discard; gl_FragColor = vec4(vColor, vA); }`,
+});
+const BF_N = 9, BIRD_N = 13;
+function critters(n, shape, mat, colorFn) {
+  const g = wingGeometry(shape);
+  const col = new Float32Array(n * 3), rnd = new Float32Array(n);
+  const R = rng(shape + 101);
+  for (let i = 0; i < n; i++) { col.set(colorFn(R), i * 3); rnd[i] = R(); }
+  g.setAttribute('aColor', new THREE.InstancedBufferAttribute(col, 3));
+  g.setAttribute('aRand', new THREE.InstancedBufferAttribute(rnd, 1));
+  const m = new THREE.InstancedMesh(g, mat, n);
+  m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(m);
+  return m;
+}
+const bfMat = critterMatFor(22, 1.05), birdMat = critterMatFor(9, 0.75);
+const butterflies = critters(BF_N, 0, bfMat, R => [[1, 0.98, 0.9], [1, 0.9, 0.35], [1, 0.62, 0.25], [0.95, 0.95, 1]][Math.floor(R() * 4)]);
+const birds = critters(BIRD_N, 1, birdMat, () => [0.12, 0.12, 0.14]);
+const bfState = Array.from({ length: BF_N }, (_, i) => { const R = rng(i * 17 + 3); return { cx: (R() - 0.5) * 16, cz: -3 - R() * 10, a: 0.2 + R() * 0.3, b: 0.3 + R() * 0.4, ph: R() * 10, r: 2 + R() * 4 }; });
+const birdFlock = { t: 99, dur: 30, from: new THREE.Vector3(), to: new THREE.Vector3(), offsets: Array.from({ length: BIRD_N }, (_, i) => new THREE.Vector3((i % 2 ? 1 : -1) * Math.ceil(i / 2) * 3.2, Math.random() * 2, Math.ceil(i / 2) * 2.6 + Math.random() * 1.5)) };
+
+const fireU = { ...U, uVis: { value: 0 }, uPR: { value: 1 } };
+const fireGeo = (() => {
+  const n = 220, pos = new Float32Array(n * 3), seed = new Float32Array(n * 4); const R = rng(57);
+  for (let i = 0; i < n; i++) {
+    const r = 3 + Math.pow(R(), 0.7) * 34, a = -Math.PI / 2 + (R() - 0.5) * Math.PI * 1.6;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    pos.set([x, heightAt(x, z) + 0.3 + R() * 1.3, z], i * 3);
+    seed.set([R(), R(), R(), R()], i * 4);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  return g;
+})();
+const fireMat = new THREE.ShaderMaterial({
+  uniforms: fireU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: COMMON + /* glsl */`
+    attribute vec4 aSeed; uniform float uVis, uPR; varying float vA;
+    void main(){
+      vec3 p = position;
+      float t = uTime * (0.25 + aSeed.w * 0.25);
+      p += vec3(sin(t + aSeed.x * 30.0) * 1.4, sin(t * 1.3 + aSeed.y * 20.0) * 0.35, cos(t * 0.8 + aSeed.z * 30.0) * 1.4);
+      vec4 mv = viewMatrix * vec4(p, 1.0);
+      float blink = smoothstep(0.55, 1.0, sin(uTime * (1.2 + aSeed.y) + aSeed.x * 60.0));
+      gl_PointSize = 0.22 * 900.0 * uPR / -mv.z;
+      vA = uVis * blink;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    varying float vA;
+    void main(){ float d = length(gl_PointCoord - 0.5); float g = smoothstep(0.5, 0.0, d); gl_FragColor = vec4(vec3(0.75, 1.0, 0.35) * (g * g * 1.4 + smoothstep(0.12, 0.0, d)), vA); }`,
+});
+const fireflies = new THREE.Points(fireGeo, fireMat); fireflies.frustumCulled = false; scene.add(fireflies);
+
+// =====================================================================
+//  ポストエフェクト（色調・実写のレンズ感・ブラウン管）
+// =====================================================================
+let rt = null;
+const postU = { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2() }, uRealism: { value: 0 }, uCRT: { value: 0 }, uTime: { value: 0 }, uPR: { value: 1 }, uNight: { value: 0 } };
+const postMat = new THREE.ShaderMaterial({
+  uniforms: postU, depthTest: false, depthWrite: false,
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uRealism, uCRT, uTime, uPR, uNight;
+    varying vec2 vUv;
+    float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+    vec3 tex(vec2 uv){ return texture2D(tDiffuse, uv).rgb; }
+    void main(){
+      vec2 uv = vUv;
+      float k = uCRT;
+      // ブラウン管のゆがみ
+      vec2 cc = uv * 2.0 - 1.0;
+      cc *= 1.0 + dot(cc, cc) * 0.07 * k;
+      uv = cc * (1.0 - 0.04 * k) * 0.5 + 0.5;
+      if (k > 0.001) {
+        vec2 grid = uRes / mix(1.0, 2.6 * uPR, k);
+        uv = mix(uv, (floor(uv * grid) + 0.5) / grid, smoothstep(0.2, 0.7, k));
+      }
+      vec2 ca = (uv - 0.5) * (0.0035 * k + 0.0012 * uRealism);
+      vec3 col = vec3(tex(uv + ca).r, tex(uv).g, tex(uv - ca).b);
+      // にじみ
+      if (k > 0.001) {
+        vec2 px = 2.5 / uRes * uPR;
+        vec3 blur = (tex(uv + vec2(px.x, 0)) + tex(uv - vec2(px.x, 0)) + tex(uv + vec2(0, px.y)) + tex(uv - vec2(0, px.y))) * 0.25;
+        col = mix(col, max(col, blur), 0.5 * k);
+        col += blur * blur * 0.25 * k;
+      }
+      // 色調：0 = あの壁紙（鮮やか）／1 = 実写（自然）
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      float sat = mix(1.12, 0.96, uRealism);
+      col = mix(vec3(l), col, sat);
+      col = mix(col, (col - 0.5) * 1.07 + 0.5, 1.0 - uRealism);
+      col = mix(col, col * vec3(1.03, 1.0, 0.95) + 0.015, uRealism);
+      // 周辺減光・粒子
+      vec2 vc = vUv - 0.5;
+      float vig = 1.0 - dot(vc, vc) * (0.45 * uRealism + 0.15 + 1.1 * k);
+      col *= vig;
+      col += (h12(vUv * uRes + fract(uTime) * 100.0) - 0.5) * (0.035 * uRealism + 0.05 * k);
+      // 走査線・シャドウマスク
+      if (k > 0.001) {
+        float period = max(2.0, floor(3.0 * uPR + 0.5));
+        float line = 0.5 + 0.5 * cos(mod(gl_FragCoord.y, period) / period * 6.28318);
+        col *= mix(1.0, 0.8 + 0.28 * line, k);
+        float m = mod(gl_FragCoord.x / uPR, 3.0);
+        vec3 mask = m < 1.0 ? vec3(1.12, 0.92, 0.92) : (m < 2.0 ? vec3(0.92, 1.12, 0.92) : vec3(0.92, 0.92, 1.12));
+        col *= mix(vec3(1.0), mask, 0.55 * k);
+        col *= 1.0 - k * 0.025 * sin(uTime * 55.0);
+        col = mix(col, col * vec3(1.02, 1.04, 0.98), k);
+        // 画面のふち（四隅は丸く）
+        vec2 q = abs(uv * 2.0 - 1.0);
+        float rr = 0.09 * k;
+        float corner = 1.0 - smoothstep(rr - 0.012, rr, length(max(q - (1.0 - rr), 0.0)));
+        corner *= 1.0 - step(1.0, max(q.x, q.y));
+        col = mix(vec3(0.015), col, corner);
+      }
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+    }`,
+});
+const postScene = new THREE.Scene();
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
+
+// =====================================================================
+//  画質 / リサイズ
+// =====================================================================
+let quality = 'std';
+try { quality = localStorage.getItem('oka-quality') || 'std'; } catch (e) {}
+function applyQuality() {
+  const pr = Math.min(devicePixelRatio, quality === 'high' ? 2 : 1.25);
+  renderer.setPixelRatio(pr);
+  buildGrass(quality === 'high' ? 300000 : 150000);
+  document.getElementById('btnQuality').textContent = quality === 'high' ? '高精細' : '標準';
+  resize();
+}
+function resize() {
+  const w = innerWidth, h = innerHeight, pr = renderer.getPixelRatio();
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  if (rt) rt.dispose();
+  rt = new THREE.WebGLRenderTarget(Math.floor(w * pr), Math.floor(h * pr), { samples: 4, type: THREE.UnsignedByteType });
+  postU.tDiffuse.value = rt.texture;
+  postU.uRes.value.set(w * pr, h * pr); postU.uPR.value = pr;
+  snowMat.uniforms.uPR.value = pr; fireU.uPR.value = pr;
+}
+addEventListener('resize', resize);
+
+// =====================================================================
+//  時刻と色
+// =====================================================================
+const C = (r, g, b) => new THREE.Color(r, g, b);
+const SKYKEYS = [
+  // 時刻, 天頂, 地平線, 光の色, 環境光
+  [0,    C(.010, .018, .055), C(.040, .060, .135), C(.24, .30, .50), C(.075, .095, .170)],
+  [4.5,  C(.010, .018, .055), C(.040, .060, .135), C(.24, .30, .50), C(.075, .095, .170)],
+  [5.4,  C(.060, .080, .220), C(.430, .300, .420), C(.30, .25, .35), C(.110, .110, .190)],
+  [6.2,  C(.180, .300, .580), C(1.00, .630, .420), C(1.0, .55, .30), C(.260, .230, .290)],
+  [7.6,  C(.100, .370, .820), C(.820, .800, .780), C(1.0, .86, .66), C(.330, .390, .490)],
+  [10,   C(.050, .310, .860), C(.520, .730, .990), C(1.0, .97, .90), C(.370, .460, .610)],
+  [14.5, C(.050, .310, .860), C(.520, .730, .990), C(1.0, .97, .90), C(.370, .460, .610)],
+  [16.6, C(.090, .350, .820), C(.780, .800, .830), C(1.0, .87, .64), C(.340, .380, .480)],
+  [17.8, C(.200, .300, .600), C(1.00, .560, .290), C(1.0, .52, .24), C(.300, .230, .250)],
+  [18.6, C(.120, .140, .360), C(.720, .310, .300), C(.70, .30, .25), C(.170, .130, .210)],
+  [19.6, C(.030, .050, .140), C(.130, .110, .230), C(.22, .25, .42), C(.070, .080, .150)],
+  [24,   C(.010, .018, .055), C(.040, .060, .135), C(.24, .30, .50), C(.075, .095, .170)],
+];
+function skyAt(h) {
+  let i = 0; while (i < SKYKEYS.length - 2 && SKYKEYS[i + 1][0] <= h) i++;
+  const a = SKYKEYS[i], b = SKYKEYS[i + 1];
+  const t = smoothstep(0, 1, (h - a[0]) / (b[0] - a[0]));
+  return [1, 2, 3, 4].map(k => a[k].clone().lerp(b[k], t));
+}
+function bodyDir(h, out) {
+  const t = (h - 6) / 12;
+  const az = THREE.MathUtils.degToRad(28 + 304 * t);
+  const el = THREE.MathUtils.degToRad(66 * Math.sin(Math.PI * t));
+  return out.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+}
+// 季節ごとの草の色 [あの壁紙 base, tip, 実写 base, tip]
+const SEASONS = [
+  [C(.13, .40, .04), C(.47, .80, .13), C(.20, .34, .10), C(.56, .72, .31)],   // 春
+  [C(.08, .34, .04), C(.34, .68, .10), C(.13, .28, .07), C(.42, .60, .22)],   // 夏
+  [C(.40, .33, .07), C(.86, .68, .22), C(.30, .25, .11), C(.76, .63, .36)],   // 秋
+  [C(.28, .30, .14), C(.54, .54, .28), C(.26, .24, .15), C(.58, .52, .36)],   // 冬
+];
+const FLOWERS = [1.0, 0.45, 0.06, 0.0], DRY = [0.04, 0.08, 0.55, 0.7];
+function seasonMix(s, k) {
+  const i = Math.floor(s) % 4, j = (i + 1) % 4, t = smoothstep(0, 1, s - Math.floor(s));
+  return [SEASONS[i][k].clone().lerp(SEASONS[j][k], t)];
+}
+function seasonVal(arr, s) { const i = Math.floor(s) % 4, j = (i + 1) % 4, t = smoothstep(0, 1, s - Math.floor(s)); return arr[i] * (1 - t) + arr[j] * t; }
+
+const sunDir = new THREE.Vector3(), moonDir = new THREE.Vector3();
+const tmpC = new THREE.Color();
+function grey(c, f = 1) { const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11; return new THREE.Color(l * f, l * f, l * f * 1.04); }
+
+function updateEnvironment() {
+  const h = st.time, r = st.real, oc = st.overcast;
+  let [zen, hor, light, amb] = skyAt(h);
+  bodyDir(h, sunDir);
+  bodyDir((h + 12) % 24, moonDir);
+  const day = smoothstep(-0.06, 0.12, sunDir.y);
+  const night = 1 - smoothstep(-0.16, -0.02, sunDir.y);
+
+  // 実写度：空は淡く、ややかすむ
+  const dayish = smoothstep(0.12, 0.45, sunDir.y);
+  zen.lerp(zen.clone().lerp(grey(zen, 1.05), 0.45).addScalar(0.05 * day), r * 0.9 * (1 - dayish));
+  hor.lerp(hor.clone().lerp(grey(hor, 1.03), 0.35).addScalar(0.04 * day), r * 0.8 * (1 - dayish));
+  zen.lerp(C(0.42, 0.60, 0.84), r * 0.88 * dayish);
+  hor.lerp(C(0.80, 0.86, 0.92), r * 0.85 * dayish);
+  // 天気：くもり・雨・雪
+  const gz = grey(zen, 0.9 + 0.3 * day), gh = grey(hor, 0.95 + 0.2 * day);
+  zen.lerp(gz, oc * 0.88); hor.lerp(gh, oc * 0.8);
+  light.multiplyScalar(1 - 0.72 * oc);
+  amb.lerp(grey(amb, 1.15), oc * 0.6);
+
+  let lightDir, lightCol = light.clone();
+  if (day > 0.02) { lightDir = sunDir.clone(); lightCol.multiplyScalar(smoothstep(-0.03, 0.1, sunDir.y)); }
+  else { lightDir = moonDir.clone(); lightCol.multiplyScalar(smoothstep(0.0, 0.25, moonDir.y) * 0.9); }
+  if (lightDir.y < 0.02) lightDir.y = 0.02;
+  lightDir.normalize();
+
+  U.uLightDir.value.copy(lightDir);
+  U.uLightColor.value.copy(lightCol);
+  U.uAmbient.value.copy(amb).multiplyScalar(mix(1.1, 0.95, r));
+  U.uFogColor.value.copy(hor).lerp(zen, 0.12);
+  U.uFogDensity.value = mix(0.00016, 0.00042, r) * (1 + oc * 5 + st.snowfall * 4) * (1 + st.rain * 2);
+  U.uRealism.value = r;
+  U.uWind.value = st.wind;
+  U.uCloudCover.value = mix(mix(0.43, 0.33, r), 0.97, oc);
+  U.uSnow.value = Math.max(smoothstep(2.55, 3.0, st.season) * (1 - smoothstep(3.55, 3.92, st.season)), st.snowAcc);
+  U.uWet.value = st.wet;
+
+  skyU.uZenith.value.copy(zen); skyU.uHorizon.value.copy(hor);
+  skyU.uSunDir.value.copy(sunDir); skyU.uMoonDir.value.copy(moonDir);
+  skyU.uSunColor.value.copy(light).multiplyScalar(day);
+  skyU.uDay.value = day; skyU.uNight.value = night; skyU.uOvercast.value = oc;
+  skyU.uRainbow.value = st.rainbow;
+  const cl = light.clone().multiplyScalar(day * 1.05).lerp(C(1, 1, 1), 0.5 * day).add(amb.clone().multiplyScalar(0.35));
+  if (night > 0.5) cl.copy(amb).multiplyScalar(2.2);
+  cl.lerp(grey(cl, 0.9), oc * 0.7);
+  skyU.uCloudLit.value.copy(cl);
+  skyU.uCloudDark.value.copy(amb).multiplyScalar(mix(1.5, 1.2, oc)).lerp(hor, 0.25).lerp(grey(amb, 1.2), oc * 0.5);
+
+  // 草の色
+  const s = st.season;
+  const bXP = seasonMix(s, 0)[0], tXP = seasonMix(s, 1)[0], bR = seasonMix(s, 2)[0], tR = seasonMix(s, 3)[0];
+  groundU.uGrassBase.value.copy(bXP).lerp(bR, r);
+  groundU.uGrassTip.value.copy(tXP).lerp(tR, r);
+  grassU.uDryAmount.value = seasonVal(DRY, s) * mix(0.15, 1.0, r) + 0.06 * r;
+  grassU.uFlowerAmount.value = seasonVal(FLOWERS, s) * mix(0.75, 0.5, r) * (1 - U.uSnow.value);
+
+  postU.uRealism.value = r; postU.uCRT.value = st.crt; postU.uNight.value = night;
+  return { day, night };
+}
+const mix = (a, b, t) => a + (b - a) * t;
+
+// =====================================================================
+//  カメラ操作 ＆ 草をなでる
+// =====================================================================
+const look = { yaw: 0, pitch: 0.1, tyaw: 0, tpitch: 0.1, fov: 42, tfov: 42 };
+const pointers = new Map();
+let dragging = false, lastX = 0, lastY = 0, pinchD = 0;
+let touchIdx = 0; const lastTouch = new THREE.Vector2(1e9, 1e9);
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function strokeAt(cx, cy) {
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const o = ray.ray.origin, d = ray.ray.direction;
+  let hit = null;
+  for (let t = 0.3; t < GRASS_R * 0.9; t += Math.max(0.12, t * 0.03)) {
+    const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
+    if (y <= heightAt(x, z) + 0.1) { hit = [x, z, t]; break; }
+  }
+  if (!hit) return;
+  const [x, z, t] = hit;
+  if (Math.hypot(x - lastTouch.x, z - lastTouch.y) < Math.max(0.25, t * 0.03)) return;
+  lastTouch.set(x, z);
+  touchIdx = (touchIdx + 1) % TOUCH_N;
+  touches[touchIdx].set(x, z, 1, Math.max(0.9, t * 0.06) * mix(1, 1.4, st.real));
+}
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  canvas.classList.add('dragging');
+  if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); }
+  ensureAudio();
+});
+canvas.addEventListener('pointermove', e => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+    look.tfov = THREE.MathUtils.clamp(look.tfov * pinchD / Math.max(d, 1), 18, 70); pinchD = d; return;
+  }
+  if (dragging) {
+    const s = look.fov / 42 * 0.0042;
+    look.tyaw -= (e.clientX - lastX) * s;
+    look.tpitch = THREE.MathUtils.clamp(look.tpitch + (e.clientY - lastY) * s, -0.45, 0.75);
+    lastX = e.clientX; lastY = e.clientY;
+  }
+  strokeAt(e.clientX, e.clientY);
+});
+const endPointer = e => { pointers.delete(e.pointerId); if (pointers.size === 0) { dragging = false; canvas.classList.remove('dragging'); } };
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('wheel', e => { e.preventDefault(); look.tfov = THREE.MathUtils.clamp(look.tfov * Math.exp(e.deltaY * 0.0011), 18, 70); }, { passive: false });
+
+// =====================================================================
+//  環境音（すべてブラウザ内で合成）
+// =====================================================================
+const audio = { ctx: null, on: false };
+function ensureAudio() { if (params.sound && !audio.ctx) startAudio(); }
+function startAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  audio.ctx = ctx;
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+  const ch = buf.getChannelData(0); let b = 0;
+  for (let i = 0; i < ch.length; i++) { const w = Math.random() * 2 - 1; b = 0.985 * b + 0.15 * w; ch[i] = w * 0.5 + b * 0.5; }
+  const noise = () => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.start(0, Math.random() * 2); return s; };
+  audio.master = ctx.createGain(); audio.master.gain.value = 0; audio.master.connect(ctx.destination);
+  audio.master.gain.setTargetAtTime(0.9, ctx.currentTime, 1.0);
+  const chain = (src, nodes, gain) => { let n = src; for (const x of nodes) { n.connect(x); n = x; } const g = ctx.createGain(); g.gain.value = gain; n.connect(g); g.connect(audio.master); return g; };
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.5;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  audio.windF = bp; audio.wind = chain(noise(), [bp, lp], 0);
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2600;
+  audio.rustle = chain(noise(), [hp], 0);
+  const rhp = ctx.createBiquadFilter(); rhp.type = 'highpass'; rhp.frequency.value = 700;
+  const rlp = ctx.createBiquadFilter(); rlp.type = 'lowpass'; rlp.frequency.value = 6000;
+  audio.rain = chain(noise(), [rhp, rlp], 0);
+  audio.fx = ctx.createGain(); audio.fx.gain.value = 0.5; audio.fx.connect(audio.master);
+  audio.nextBird = 0; audio.nextCricket = 0;
+}
+function chirp(t0) {
+  const ctx = audio.ctx, n = 2 + Math.floor(Math.random() * 4), base = 2400 + Math.random() * 2200;
+  const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; pan.connect(audio.fx); }
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i * (0.09 + Math.random() * 0.08), o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(base * (1 + Math.random() * 0.2), t);
+    o.frequency.exponentialRampToValueAtTime(base * (0.6 + Math.random() * 0.9), t + 0.07);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.06, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
+    o.connect(g); g.connect(pan || audio.fx); o.start(t); o.stop(t + 0.1);
+  }
+}
+function cricket(t0) {
+  const ctx = audio.ctx, f = 4200 + Math.random() * 600;
+  for (let i = 0; i < 3; i++) {
+    const t = t0 + i * 0.055, o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = f; g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.018, t + 0.008); g.gain.linearRampToValueAtTime(0, t + 0.04);
+    o.connect(g); g.connect(audio.fx); o.start(t); o.stop(t + 0.05);
+  }
+}
+function updateAudio(env) {
+  if (!audio.ctx) return;
+  const ctx = audio.ctx, now = ctx.currentTime;
+  audio.master.gain.setTargetAtTime(params.sound && !paused ? 0.9 : 0, now, 0.4);
+  if (!params.sound) return;
+  const gust = 0.5 + 0.5 * Math.sin(simTime * 0.6) * Math.sin(simTime * 0.23 + 1.0);
+  audio.wind.gain.setTargetAtTime(0.03 + 0.42 * st.wind * (0.55 + 0.45 * gust), now, 0.3);
+  audio.windF.frequency.setTargetAtTime(300 + 500 * st.wind * gust, now, 0.5);
+  audio.rustle.gain.setTargetAtTime((0.006 + 0.05 * st.wind * gust) * (1 - U.uSnow.value * 0.8), now, 0.2);
+  audio.rain.gain.setTargetAtTime(0.32 * st.rain, now, 0.5);
+  const winter = U.uSnow.value > 0.5;
+  if (now > audio.nextBird) {
+    if (env.day > 0.4 && st.rain < 0.3 && !winter) chirp(now + 0.05);
+    audio.nextBird = now + 0.8 + Math.random() * (env.day > 0.4 && st.season < 2.5 ? 3 : 6);
+  }
+  if (now > audio.nextCricket) {
+    if (env.night > 0.6 && !winter && st.rain < 0.3) cricket(now + 0.02);
+    audio.nextCricket = now + 0.35 + Math.random() * 0.4;
+  }
+}
+
+// =====================================================================
+//  UI
+// =====================================================================
+const $ = id => document.getElementById(id);
+const sliders = ['time', 'wind', 'cloud', 'rainbow', 'season', 'real', 'crt'];
+const SEASON_NAMES = ['春', '初夏', '夏', '晩夏', '秋', '晩秋', '冬', '早春'];
+function timeName(h) { return h < 4 ? '深夜' : h < 6 ? '夜明け' : h < 10 ? '朝' : h < 15 ? '昼' : h < 17 ? '午後' : h < 19.3 ? '夕方' : '夜'; }
+function hhmm(h) { const m = Math.floor(h * 60) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+function fillSlider(el) { const p = (el.value - el.min) / (el.max - el.min) * 100; el.style.setProperty('--p', p + '%'); }
+function syncUI() {
+  for (const k of sliders) { $(k).value = params[k]; fillSlider($(k)); }
+  $('v_time').textContent = hhmm(params.time) + '　' + timeName(params.time);
+  $('v_wind').textContent = params.wind.toFixed(2);
+  $('v_cloud').textContent = params.cloud.toFixed(2);
+  $('v_rainbow').textContent = params.rainbow < 0.01 ? 'なし' : params.rainbow.toFixed(2);
+  $('v_season').textContent = SEASON_NAMES[Math.round(params.season * 2) % 8];
+  $('v_real').textContent = Math.round(params.real * 100) + '%';
+  $('v_crt').textContent = params.crt < 0.01 ? 'なし' : Math.round(params.crt * 100) + '%';
+  document.querySelectorAll('#weather button').forEach(b => b.classList.toggle('on', +b.dataset.w === params.weather));
+  $('t_auto').classList.toggle('on', params.auto);
+  $('t_life').classList.toggle('on', params.life);
+  $('t_meteor').classList.toggle('on', params.meteor);
+  $('t_sound').classList.toggle('on', params.sound);
+}
+function clearPresetMark() { document.querySelectorAll('.preset').forEach(b => b.classList.remove('active')); }
+for (const k of sliders) $(k).addEventListener('input', e => { params[k] = parseFloat(e.target.value); clearPresetMark(); syncUI(); });
+document.querySelectorAll('#weather button').forEach(b => b.addEventListener('click', () => { params.weather = +b.dataset.w; clearPresetMark(); syncUI(); }));
+const toggle = (id, key, after) => $(id).addEventListener('click', () => { params[key] = !params[key]; syncUI(); after && after(); });
+toggle('t_auto', 'auto');
+toggle('t_life', 'life');
+toggle('t_meteor', 'meteor');
+toggle('t_sound', 'sound', () => { if (params.sound) { if (!audio.ctx) startAudio(); else audio.ctx.resume(); toast('環境音 ON'); } });
+PRESETS.forEach((pr, i) => {
+  const b = document.createElement('button');
+  b.className = 'preset'; b.innerHTML = `<span class="dot" style="background:${pr.grad}"></span>${pr.name}`;
+  b.addEventListener('click', () => {
+    Object.assign(params, pr.p);
+    if (pr.wet) st.wet = pr.wet;
+    if (pr.name === '冬の夜') params.meteor = true;
+    syncUI(); clearPresetMark(); b.classList.add('active');
+  });
+  $('presets').appendChild(b);
+});
+let paused = false;
+$('btnPause').addEventListener('click', () => { paused = !paused; $('btnPause').textContent = paused ? '▶ 再開' : 'Ⅱ 一時停止'; });
+$('btnReset').addEventListener('click', () => { Object.assign(params, { ...DEFAULTS, sound: params.sound }); look.tyaw = 0; look.tpitch = 0.1; look.tfov = 42; syncUI(); clearPresetMark(); document.querySelector('.preset').classList.add('active'); });
+$('btnPanel').addEventListener('click', () => $('panel').classList.toggle('hidden'));
+$('btnQuality').addEventListener('click', () => { quality = quality === 'high' ? 'std' : 'high'; try { localStorage.setItem('oka-quality', quality); } catch (e) {} applyQuality(); toast(quality === 'high' ? '高精細：草が2倍に' : '標準画質'); });
+$('btnFull').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); });
+let toastTimer = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1600); }
+if (innerWidth < 720) $('panel').classList.add('hidden');
+
+// =====================================================================
+//  ループ
+// =====================================================================
+const clock = new THREE.Clock();
+let simTime = 0;
+const meteor = { next: 3, t: -1, a: new THREE.Vector3(), b: new THREE.Vector3() };
+const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpV = new THREE.Vector3(), tmpS = new THREE.Vector3(), tmpE = new THREE.Euler();
+function wrapLerp(cur, target, k, period) { const d = ((target - cur) % period + period * 1.5) % period - period / 2; return (cur + d * k + period) % period; }
+let uiTick = 0;
+
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!paused) simTime += dt;
+  const k = 1 - Math.exp(-dt * 2.2), kw = 1 - Math.exp(-dt * 0.8);
+
+  if (params.auto && !paused) {
+    params.time = (params.time + dt * 24 / 150) % 24;
+    if ((uiTick += dt) > 0.25) { uiTick = 0; syncUI(); }
+  }
+  st.time = params.auto ? wrapLerp(st.time, params.time, 1 - Math.exp(-dt * 8), 24) : wrapLerp(st.time, params.time, k, 24);
+  st.season = wrapLerp(st.season, params.season, k, 4);
+  for (const key of ['wind', 'cloud', 'rainbow', 'real', 'crt']) st[key] += (params[key] - st[key]) * k;
+  const W = [[0, 0, 0], [0.72, 0, 0], [1, 1, 0], [0.85, 0, 1]][params.weather];
+  st.overcast += (W[0] - st.overcast) * kw; st.rain += (W[1] - st.rain) * kw; st.snowfall += (W[2] - st.snowfall) * kw;
+  if (!paused) {
+    st.wet = st.rain > 0.3 ? Math.min(1, st.wet + dt * 0.12) : Math.max(0, st.wet - dt / 45);
+    st.snowAcc = st.snowfall > 0.3 ? Math.min(1, st.snowAcc + dt / 25) : Math.max(0, st.snowAcc - dt / (params.season > 2.6 && params.season < 3.6 ? 40 : 12));
+  }
+  st.life += ((params.life ? 1 : 0) - st.life) * k;
+
+  // 風向きはゆっくり揺らぐ
+  const wa = Math.PI * 0.87 + Math.sin(simTime * 0.05) * 0.25;
+  U.uWindDir.value.set(Math.cos(wa), Math.sin(wa));
+  if (!paused) U.uCloudShift.value.addScaledVector(U.uWindDir.value, -dt * st.cloud * 0.03 - dt * 0.0006);
+  U.uTime.value = simTime;
+
+  // カメラ
+  look.yaw += (look.tyaw - look.yaw) * (1 - Math.exp(-dt * 8));
+  look.pitch += (look.tpitch - look.pitch) * (1 - Math.exp(-dt * 8));
+  look.fov += (look.tfov - look.fov) * (1 - Math.exp(-dt * 6));
+  const eye = mix(1.7, 1.05, smoothstep(0, 1, st.real));
+  camera.position.set(0, heightAt(0, 0) + eye + Math.sin(simTime * 0.5) * 0.015, 0);
+  camera.rotation.set(look.pitch + Math.sin(simTime * 0.31) * 0.002, look.yaw, 0, 'YXZ');
+  camera.fov = look.fov; camera.updateProjectionMatrix();
+  U.uCamPos.value.copy(camera.position);
+  sky.position.copy(camera.position);
+
+  const env = updateEnvironment();
+  skyU.uStarRot.value = simTime * 0.004;
+  precipU.uRain.value = st.rain; precipU.uSnowFall.value = st.snowfall;
+  rain.visible = st.rain > 0.01; snow.visible = st.snowfall > 0.01;
+
+  // なでた跡は少しずつ戻る
+  for (const t of touches) t.z *= Math.exp(-dt * 0.9);
+
+  // 流れ星
+  if (params.meteor && env.night > 0.6 && !paused) {
+    meteor.next -= dt;
+    if (meteor.next < 0 && meteor.t < 0) {
+      const az = look.yaw + (Math.random() - 0.5) * 1.4, el = 0.35 + Math.random() * 0.5;
+      meteor.a.set(-Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el));
+      meteor.b.copy(meteor.a).add(tmpV.set(Math.random() - 0.5, -0.25 - Math.random() * 0.2, Math.random() - 0.5).multiplyScalar(0.45)).normalize();
+      meteor.t = 0; meteor.next = 2.5 + Math.random() * 6;
+    }
+  }
+  if (meteor.t >= 0) { meteor.t += dt / 0.9; if (meteor.t > 1) meteor.t = -1; }
+  skyU.uMeteorA.value.copy(meteor.a); skyU.uMeteorB.value.copy(meteor.b); skyU.uMeteorT.value = meteor.t;
+
+  // ちょうちょ
+  const lifeDay = st.life * env.day * (1 - st.rain) * (1 - U.uSnow.value) * (1 - st.snowfall);
+  bfMat.uniforms.uVis.value = smoothstep(0.05, 0.4, lifeDay * (st.season < 2.6 ? 1 : 1 - smoothstep(2.6, 2.9, st.season)));
+  for (let i = 0; i < BF_N; i++) {
+    const b = bfState[i], t = simTime;
+    const x = b.cx + Math.sin(t * b.a + b.ph) * b.r + Math.sin(t * 1.7 + b.ph) * 0.4;
+    const z = b.cz + Math.cos(t * b.b + b.ph * 1.3) * b.r;
+    const dx = Math.cos(t * b.a + b.ph) * b.a * b.r, dz = -Math.sin(t * b.b + b.ph * 1.3) * b.b * b.r;
+    const y = heightAt(x, z) + mix(0.35, 0.75, st.real) + 0.25 * Math.sin(t * 2.3 + b.ph) + 0.1 * Math.sin(t * 9 + b.ph);
+    tmpE.set(0, Math.atan2(dx, dz), Math.sin(t * 3 + b.ph) * 0.2);
+    tmpM.compose(tmpV.set(x, y, z), tmpQ.setFromEuler(tmpE), tmpS.setScalar(0.11));
+    butterflies.setMatrixAt(i, tmpM);
+  }
+  butterflies.instanceMatrix.needsUpdate = true;
+
+  // 鳥の群れ
+  const f = birdFlock;
+  f.t += dt / f.dur;
+  if (f.t > 1 && !paused) {
+    f.t = 0; f.dur = 26 + Math.random() * 14;
+    const side = Math.random() < 0.5 ? 1 : -1, zc = -120 - Math.random() * 160, y = 30 + Math.random() * 30;
+    f.from.set(side * 420, y, zc); f.to.set(-side * 420, y + (Math.random() - 0.5) * 30, zc - 60 + Math.random() * 120);
+  }
+  birdMat.uniforms.uVis.value = st.life * env.day * (1 - st.rain) * (1 - st.snowfall * 0.8) * smoothstep(0, 0.08, f.t) * smoothstep(1, 0.9, f.t);
+  const dir = tmpS.copy(f.to).sub(f.from).normalize();
+  const heading = Math.atan2(dir.x, dir.z);
+  for (let i = 0; i < BIRD_N; i++) {
+    const o = f.offsets[i];
+    const p = tmpV.copy(f.from).lerp(f.to, f.t);
+    const ca = Math.cos(heading), sa = Math.sin(heading);
+    p.x += o.x * ca - o.z * sa; p.z += -o.x * sa - o.z * ca; p.y += o.y + Math.sin(simTime * 0.8 + i) * 0.6;
+    tmpM.compose(p, tmpQ.setFromEuler(tmpE.set(0, heading, 0)), new THREE.Vector3(1.1, 1.1, 1.1));
+    birds.setMatrixAt(i, tmpM);
+  }
+  birds.instanceMatrix.needsUpdate = true;
+
+  // ホタル（夏の夜）
+  const summer = 1 - Math.min(1, Math.abs(st.season - 1.1) / 1.0);
+  fireU.uVis.value = st.life * env.night * Math.max(summer, 0.0) * (1 - st.rain) * (1 - U.uSnow.value);
+  fireflies.visible = fireU.uVis.value > 0.01;
+
+  postU.uTime.value = simTime;
+  $('clockText').textContent = hhmm(st.time) + '  ' + timeName(st.time);
+  updateAudio(env);
+
+  renderer.setRenderTarget(rt);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  renderer.render(postScene, postCam);
+  requestAnimationFrame(frame);
+}
+
+// 開発用：コンソールから oka.jump() で遷移を一瞬で終わらせる
+window.oka = { params, st, look, touches, jump() { Object.assign(st, { time: params.time, wind: params.wind, cloud: params.cloud, rainbow: params.rainbow, season: params.season, real: params.real, crt: params.crt }); const W = [[0, 0, 0], [0.72, 0, 0], [1, 1, 0], [0.85, 0, 1]][params.weather]; st.overcast = W[0]; st.rain = W[1]; st.snowfall = W[2]; st.snowAcc = W[2]; },
+  bench(n = 20) { const gl = renderer.getContext(), px = new Uint8Array(4); const t0 = performance.now();
+    for (let i = 0; i < n; i++) { renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    return (performance.now() - t0) / n; } };
+applyQuality();
+syncUI();
+document.querySelector('.preset').classList.add('active');
+// 起動音：自動再生できればそのまま、ブラウザに止められたらクリックで起動
+// startup.mp3 は手元のPCにだけ置く音。見つからなければ（公開版など）オリジナルの起動音を合成して鳴らす
+const startup = $('startupSound');
+startup.volume = 0.85;
+const startupFile = new Promise(res => {
+  if (startup.readyState >= 3) return res(true);
+  startup.addEventListener('canplaythrough', () => res(true), { once: true });
+  startup.addEventListener('error', () => res(false), { once: true });
+  setTimeout(() => res(startup.readyState >= 2), 2500);
+});
+let bootCtx = null;
+async function synthChime() {
+  try {
+    const ctx = bootCtx || (bootCtx = new (window.AudioContext || window.webkitAudioContext)());
+    await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 300))]);
+    if (ctx.state !== 'running') return false;
+    const t0 = ctx.currentTime + 0.05;
+    const out = ctx.createGain(); out.gain.value = 0.55; out.connect(ctx.destination);
+    // 残響（ノイズで作ったインパルス応答）
+    const verb = ctx.createConvolver(), len = ctx.sampleRate * 3.2, ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    verb.buffer = ir;
+    const wet = ctx.createGain(); wet.gain.value = 0.45; verb.connect(wet); wet.connect(out);
+    const note = (f, t, dur, vol, type = 'sine') => {
+      for (const det of [-4, 4]) {
+        const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+        o.type = type; o.frequency.value = f; o.detune.value = det;
+        lp.type = 'lowpass'; lp.frequency.value = 2600;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(vol, t + Math.min(0.08, dur * 0.2));
+        g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+        o.connect(lp); lp.connect(g); g.connect(out); g.connect(verb);
+        o.start(t); o.stop(t + dur + 0.05);
+      }
+    };
+    // ふわっと上がっていく分散和音 → やわらかい和音の広がり → きらめき
+    [196.0, 293.66, 440.0, 493.88, 587.33].forEach((f, i) => note(f, t0 + i * 0.16, 2.6 - i * 0.2, 0.09, 'triangle'));
+    [98.0, 146.83, 246.94, 369.99].forEach(f => note(f, t0 + 0.75, 3.6, 0.07));
+    [1174.66, 1479.98, 1760.0].forEach((f, i) => note(f, t0 + 0.95 + i * 0.12, 1.6, 0.025));
+    return true;
+  } catch (e) { return false; }
+}
+async function playStartup() {
+  if (await startupFile) {
+    try { startup.currentTime = 0; await startup.play(); return true; } catch (e) { return false; }
+  }
+  return synthChime();
+}
+function reveal() { $('loading').classList.add('gone'); }
+$('loading').addEventListener('click', () => {
+  if (!$('loading').classList.contains('ready')) return;
+  $('loading').classList.remove('ready');
+  playStartup();
+  ensureAudio();
+  setTimeout(reveal, 120);
+});
+requestAnimationFrame(async () => {
+  frame();
+  if (await playStartup()) setTimeout(reveal, 250);
+  else { $('bootMsg').hidden = true; $('btnStart').hidden = false; $('loading').classList.add('ready'); }
+});
+</script>
+</body>
+</html>
